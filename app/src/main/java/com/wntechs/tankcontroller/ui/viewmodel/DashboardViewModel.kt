@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.wntechs.tankcontroller.data.model.StatusResponse
 import com.wntechs.tankcontroller.data.repository.DeviceRepository
 import com.wntechs.tankcontroller.util.AppResult
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,12 +32,26 @@ class DashboardViewModel(
                 _uiState.update { it.copy(baseUrl = settings.baseUrl) }
             }
         }
+        
+        // Initial refresh
         refresh()
+
+        // Automatic polling every 8 seconds
+        viewModelScope.launch {
+            while (true) {
+                delay(8000)
+                if (_uiState.value.baseUrl.isNotBlank() && !_uiState.value.loading) {
+                    refresh(showLoading = false)
+                }
+            }
+        }
     }
 
-    fun refresh() {
+    fun refresh(showLoading: Boolean = true) {
         viewModelScope.launch {
-            _uiState.update { it.copy(loading = true, error = null, message = null) }
+            if (showLoading) {
+                _uiState.update { it.copy(loading = true, error = null, message = null) }
+            }
             when (val result = repository.getStatus()) {
                 is AppResult.Success -> _uiState.update { it.copy(loading = false, status = result.data) }
                 is AppResult.Error -> _uiState.update { it.copy(loading = false, error = result.message) }

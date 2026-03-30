@@ -73,7 +73,7 @@ fun WaterLevelCard(uiState: DashboardUiState) {
         ) {
             Text("Water Level", color = Color.White.copy(alpha = 0.9f))
             Text("${status.waterLevelPercent}%", color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text("${status.litres} L   •   ${status.waterHeightMm} mm height   •   ${status.filteredDistanceMm} mm distance", color = Color.White)
+            /*Text("${status.litres} L   •   ${status.waterHeightMm} mm height   •   ${status.filteredDistanceMm} mm distance", color = Color.White)*/
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
