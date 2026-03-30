@@ -5,9 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.wntechs.tankcontroller.data.model.StatusResponse
 import com.wntechs.tankcontroller.data.repository.DeviceRepository
 import com.wntechs.tankcontroller.util.AppResult
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -20,68 +18,60 @@ data class DashboardUiState(
     val error: String? = null,
 )
 
-class DashboardViewModel(
-    private val repository: DeviceRepository,
-) : ViewModel() {
+class DashboardViewModel(private val repository: DeviceRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(DashboardUiState())
-    val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+    val uiState = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             repository.settings.collect { settings ->
-                _uiState.update { it.copy(baseUrl = settings.baseUrl) }
+                if (settings.baseUrl.isNotBlank()) {
+                    _uiState.update { it.copy(baseUrl = settings.baseUrl) }
+                    // CONNECT WITH BOTH URL AND DEVICE ID
+                    repository.connect(settings.baseUrl, settings.deviceId)
+                }
             }
         }
-        
-        // Initial refresh
-        refresh()
 
-        // Automatic polling every 8 seconds
+        // Listen for MQTT Status Updates (REPLACES POLLING)
         viewModelScope.launch {
-            while (true) {
-                delay(8000)
-                if (_uiState.value.baseUrl.isNotBlank() && !_uiState.value.loading) {
-                    refresh(showLoading = false)
-                }
+            repository.status.collect { newStatus ->
+                _uiState.update { it.copy(status = newStatus, loading = false) }
+            }
+        }
+
+        // Listen for Errors from ESP
+        viewModelScope.launch {
+            repository.errors.collect { errorMsg ->
+                _uiState.update { it.copy(error = errorMsg, loading = false) }
+            }
+        }
+
+        // Listen for Online/Offline status
+        viewModelScope.launch {
+            repository.isOnline.collect { online ->
+                if (!online) _uiState.update { it.copy(error = "Device is Offline") }
             }
         }
     }
 
-    fun refresh(showLoading: Boolean = true) {
-        viewModelScope.launch {
-            if (showLoading) {
-                _uiState.update { it.copy(loading = true, error = null, message = null) }
-            }
-            when (val result = repository.getStatus()) {
-                is AppResult.Success -> _uiState.update { it.copy(loading = false, status = result.data) }
-                is AppResult.Error -> _uiState.update { it.copy(loading = false, error = result.message) }
-            }
-        }
+    fun refresh() {
+        _uiState.update { it.copy(loading = true) }
+        repository.requestUpdate()
     }
 
     fun turnManual(state: Boolean) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(loading = true, error = null, message = null) }
-            when (val result = repository.setManual(state)) {
-                is AppResult.Success -> {
-                    _uiState.update { it.copy(loading = false, message = if (state) "Motor turned ON" else "Motor turned OFF") }
-                    refresh()
-                }
-                is AppResult.Error -> _uiState.update { it.copy(loading = false, error = result.message) }
-            }
-        }
+        _uiState.update { it.copy(loading = true) }
+        repository.setManual(state)
+        // No need to call refresh()!
+        // The ESP will publish the new status to 'tank/relay1/status'
+        // and our status.collect block above will update the UI automatically.
     }
-
     fun returnAuto() {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true, error = null, message = null) }
-            when (val result = repository.setAuto()) {
-                is AppResult.Success -> {
-                    _uiState.update { it.copy(loading = false, message = "Returned to auto mode") }
-                    refresh()
-                }
-                is AppResult.Error -> _uiState.update { it.copy(loading = false, error = result.message) }
-            }
+            repository.setAuto()
+
         }
     }
 }

@@ -43,18 +43,35 @@ class ConfigurationViewModel(
     private val _uiState = MutableStateFlow(ConfigurationUiState())
     val uiState: StateFlow<ConfigurationUiState> = _uiState.asStateFlow()
 
-    init { load() }
-
-    fun load() {
+    init {
+        // 1. Listen for Config Updates from MQTT
         viewModelScope.launch {
-            _uiState.update { it.copy(loading = true, error = null, message = null) }
-            when (val result = repository.getConfig()) {
-                is AppResult.Success -> _uiState.update {
-                    it.copy(loading = false, form = result.data.toForm())
+            repository.config.collect { config ->
+                _uiState.update {
+                    it.copy(
+                        loading = false,
+                        saving = false,
+                        form = config.toForm(),
+                        message = if (it.saving) "Configuration updated" else null
+                    )
                 }
-                is AppResult.Error -> _uiState.update { it.copy(loading = false, error = result.message) }
             }
         }
+
+        // 2. Listen for Errors from MQTT
+        viewModelScope.launch {
+            repository.errors.collect { errorMsg ->
+                _uiState.update { it.copy(loading = false, saving = false, error = errorMsg) }
+            }
+        }
+
+        load()
+    }
+
+    fun load() {
+        _uiState.update { it.copy(loading = true, error = null, message = null) }
+        // In MQTT, we send a command to the device to publish its current config
+        repository.requestUpdate() // Assuming this triggers 'get_config' via repository
     }
 
     fun save() {
@@ -65,13 +82,12 @@ class ConfigurationViewModel(
             return
         }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(saving = true, error = null, message = null) }
-            when (val result = repository.updateConfig(current.toRequest())) {
-                is AppResult.Success -> _uiState.update { it.copy(saving = false, message = result.data.message ?: "Configuration applied") }
-                is AppResult.Error -> _uiState.update { it.copy(saving = false, error = result.message) }
-            }
-        }
+        _uiState.update { it.copy(saving = true, error = null, message = null) }
+        // Publish the new configuration to the 'cmd/config' topic
+        repository.updateConfig(current.toRequest())
+
+        // Note: We don't handle Success/Error here.
+        // The UI will update when the device publishes the new config back to the status topic.
     }
 
     fun update(transform: (ConfigurationForm) -> ConfigurationForm) {

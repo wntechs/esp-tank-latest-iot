@@ -11,7 +11,12 @@ android {
     compileSdk {
         version = release(36)
     }
-
+    packaging {
+        resources {
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/io.netty.versions.properties"
+        }
+    }
     defaultConfig {
         applicationId = "com.wntechs.tankcontroller"
         minSdk = 24
@@ -49,6 +54,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
 
     implementation(platform(libs.androidx.compose.bom))
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation(libs.hivemq.mqtt.client)
     androidTestImplementation(platform(libs.androidx.compose.bom))
 
     implementation(libs.androidx.compose.ui)

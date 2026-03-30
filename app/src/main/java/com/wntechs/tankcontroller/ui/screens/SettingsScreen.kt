@@ -22,9 +22,8 @@ import com.wntechs.tankcontroller.ui.viewmodel.SettingsUiState
 fun SettingsScreen(
     uiState: SettingsUiState,
     onBaseUrlChanged: (String) -> Unit,
-    onPreferMdnsChanged: (Boolean) -> Unit,
+    onDeviceIdChanged: (String) -> Unit, // Replaces onPreferMdnsChanged
     onSave: () -> Unit,
-    onReconnect: () -> Unit,
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("App Settings") }) }) { padding ->
         Column(
@@ -37,17 +36,17 @@ fun SettingsScreen(
             OutlinedTextField(
                 value = uiState.baseUrl,
                 onValueChange = onBaseUrlChanged,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Base URL") },
-                placeholder = { Text("http://tank-relay.local/") },
+                label = { Text("MQTT Broker IP/Host") }
             )
-            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Prefer mDNS hostname")
-                Switch(checked = uiState.preferMdns, onCheckedChange = onPreferMdnsChanged)
-            }
+
+            OutlinedTextField(
+                value = uiState.deviceId,
+                onValueChange = onDeviceIdChanged,
+                label = { Text("Device Identifier (Topic)") }
+            )
             uiState.savedMessage?.let { MessageBanner(it) }
             Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Save Settings") }
-            Button(onClick = onReconnect, modifier = Modifier.fillMaxWidth()) { Text("Go to Discovery") }
+
         }
     }
 }

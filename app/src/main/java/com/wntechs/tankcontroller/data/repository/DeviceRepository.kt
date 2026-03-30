@@ -1,54 +1,57 @@
 package com.wntechs.tankcontroller.data.repository
 
-import com.wntechs.tankcontroller.data.discovery.DiscoveryManager
-import com.wntechs.tankcontroller.data.local.SettingsStore
-import com.wntechs.tankcontroller.data.model.ConfigResponse
+import androidx.activity.result.launch
+import com.wntechs.tankcontroller.data.discovery.MqttManager
 import com.wntechs.tankcontroller.data.model.ConfigUpdateRequest
-import com.wntechs.tankcontroller.data.model.DiscoveredDevice
-import com.wntechs.tankcontroller.data.model.ManualRelayRequest
-import com.wntechs.tankcontroller.data.model.StatusResponse
-import com.wntechs.tankcontroller.data.remote.ApiClientFactory
-import com.wntechs.tankcontroller.util.AppResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 
 class DeviceRepository(
-    private val settingsStore: SettingsStore,
-    private val apiClientFactory: ApiClientFactory,
-    val discoveryManager: DiscoveryManager,
+    private val mqttManager: MqttManager,
+    val settings: Flow<UserSettings>
 ) {
-    val settings = settingsStore.settingsFlow
-    val discoveredDevices = discoveryManager.discoveredDevices
-    val isScanning = discoveryManager.isScanning
+    // Helper to get current deviceId from the flow safely for one-off commands
+    // In a real app, you might want to store the last known ID in a variable
+    private var currentDeviceId: String = "relay1"
 
-    fun startDiscovery(serviceType: String = "_http._tcp.") = discoveryManager.startDiscovery(serviceType)
-    fun stopDiscovery() = discoveryManager.stopDiscovery()
-
-    suspend fun saveBaseUrl(baseUrl: String, hostName: String = "", ipAddress: String = "") {
-        settingsStore.saveConnection(
-            baseUrl = apiClientFactory.normalizeBaseUrl(baseUrl),
-            hostName = hostName,
-            ipAddress = ipAddress,
-        )
-    }
-
-    suspend fun setPreferMdns(preferMdns: Boolean) = settingsStore.setPreferMdns(preferMdns)
-
-    suspend fun selectDiscoveredDevice(device: DiscoveredDevice, preferMdns: Boolean) {
-        val baseUrl = if (preferMdns) device.mdnsBaseUrl else device.httpBaseUrl
-        saveBaseUrl(baseUrl, hostName = device.hostName, ipAddress = device.ipAddress)
-    }
-
-    suspend fun getStatus(): AppResult<StatusResponse> = call { apiClientFactory.create().getStatus() }
-    suspend fun getConfig(): AppResult<ConfigResponse> = call { apiClientFactory.create().getConfig() }
-    suspend fun updateConfig(request: ConfigUpdateRequest) = call { apiClientFactory.create().updateConfig(request) }
-    suspend fun setManual(state: Boolean) = call { apiClientFactory.create().setManualRelay(ManualRelayRequest(state)) }
-    suspend fun setAuto() = call { apiClientFactory.create().setAutoMode() }
-    suspend fun pingRoot() = call { apiClientFactory.create().root() }
-
-    private suspend fun <T> call(block: suspend () -> T): AppResult<T> =
-        try {
-            AppResult.Success(block())
-        } catch (t: Throwable) {
-            AppResult.Error(t.message ?: "Unknown error", t)
+    init {
+        // Keep the local deviceId updated whenever settings change
+        CoroutineScope(Dispatchers.IO).launch {
+            settings.collect { currentDeviceId = it.deviceId }
         }
+    }
+
+    val status = mqttManager.statusFlow
+    val config = mqttManager.configFlow
+    val errors = mqttManager.errorFlow
+    val isOnline = mqttManager.isDeviceOnline
+
+    fun connect(url: String, deviceId: String) = mqttManager.connect(url, deviceId)
+
+    fun requestUpdate() = mqttManager.publish("tank/$currentDeviceId/cmd/get_status")
+
+    fun setManual(turnOn: Boolean) {
+        val cmd = if (turnOn) "ON" else "OFF"
+        mqttManager.publish("tank/$currentDeviceId/cmd/manual", cmd)
+    }
+
+    fun setAuto() = mqttManager.publish("tank/$currentDeviceId/cmd/auto")
+
+    fun updateConfig(request: ConfigUpdateRequest) {
+        val payload = Json.encodeToString(ConfigUpdateRequest.serializer(), request)
+        mqttManager.publish("tank/$currentDeviceId/cmd/config", payload)
+    }
+
+    // Add these to DeviceRepository.kt if not present
+    suspend fun saveBaseUrl(url: String) {
+        // This should call your settingsStore.updateBaseUrl(url)
+    }
+
+    suspend fun saveDeviceId(id: String) {
+        // This should call your settingsStore.updateDeviceId(id)
+    }
 }

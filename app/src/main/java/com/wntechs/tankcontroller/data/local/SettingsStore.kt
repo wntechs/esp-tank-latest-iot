@@ -1,8 +1,5 @@
 package com.wntechs.tankcontroller.data.local
-
 import android.content.Context
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -13,39 +10,44 @@ private val Context.dataStore by preferencesDataStore(name = "water_tank_setting
 
 class SettingsStore(private val context: Context) {
     private object Keys {
-        val baseUrl = stringPreferencesKey("base_url")
-        val hostName = stringPreferencesKey("host_name")
-        val ipAddress = stringPreferencesKey("ip_address")
-        val preferMdns = booleanPreferencesKey("prefer_mdns")
+        val baseUrl = stringPreferencesKey("mqtt_broker_url")
+        val deviceId = stringPreferencesKey("mqtt_device_id")
     }
 
+    // This flow now only emits settings relevant to the MQTT architecture
     val settingsFlow: Flow<DeviceConnectionSettings> = context.dataStore.data.map { prefs ->
         DeviceConnectionSettings(
-            baseUrl = prefs[Keys.baseUrl].orEmpty(),
-            hostName = prefs[Keys.hostName].orEmpty(),
-            ipAddress = prefs[Keys.ipAddress].orEmpty(),
-            preferMdns = prefs[Keys.preferMdns] ?: true,
+            // Defaulting to your specific IP as requested earlier
+            baseUrl = prefs[Keys.baseUrl] ?: "192.46.215.185",
+            deviceId = prefs[Keys.deviceId] ?: "relay1"
         )
     }
 
-    suspend fun saveConnection(baseUrl: String, hostName: String = "", ipAddress: String = "") {
+    suspend fun saveBaseUrl(url: String) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.baseUrl] = baseUrl
-            prefs[Keys.hostName] = hostName
-            prefs[Keys.ipAddress] = ipAddress
+            prefs[Keys.baseUrl] = url
         }
     }
 
-    suspend fun setPreferMdns(preferMdns: Boolean) {
+    suspend fun saveDeviceId(deviceId: String) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.preferMdns] = preferMdns
+            prefs[Keys.deviceId] = deviceId
+        }
+    }
+
+    // Optional: Single function to save both at once if needed
+    suspend fun saveSettings(url: String, deviceId: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.baseUrl] = url
+            prefs[Keys.deviceId] = deviceId
         }
     }
 }
 
+/**
+ * Data class representing the MQTT connection parameters.
+ */
 data class DeviceConnectionSettings(
     val baseUrl: String,
-    val hostName: String,
-    val ipAddress: String,
-    val preferMdns: Boolean,
+    val deviceId: String,
 )
