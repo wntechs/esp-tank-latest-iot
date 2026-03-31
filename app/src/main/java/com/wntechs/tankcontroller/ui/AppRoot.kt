@@ -105,7 +105,9 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                     uiState = ui,
                     onBaseUrlChanged = settingsViewModel::updateBaseUrl,
                     onDeviceIdChanged = settingsViewModel::updateDeviceId,
-                    onSelectPreset = settingsViewModel::selectTankPreset,
+                    onFamilySelected = settingsViewModel::selectFamily,
+                    onModelSelected = settingsViewModel::selectModel,
+                    onApplyPreset = settingsViewModel::applySelectedPreset,
                     onSave = settingsViewModel::save,
                 )
             }

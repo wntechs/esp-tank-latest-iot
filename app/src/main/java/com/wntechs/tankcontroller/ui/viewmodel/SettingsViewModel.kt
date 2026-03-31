@@ -2,6 +2,7 @@ package com.wntechs.tankcontroller.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wntechs.tankcontroller.data.model.TankFamily
 import com.wntechs.tankcontroller.data.model.TankMeasurements
 import com.wntechs.tankcontroller.data.model.TankModel
 import com.wntechs.tankcontroller.data.repository.DeviceRepository
@@ -18,6 +19,8 @@ data class SettingsUiState(
     val deviceId: String = "relay1",
     val savedMessage: String? = null,
     val tankMeasurements: TankMeasurements? = null,
+    val selectedFamily: TankFamily? = null,
+    val selectedModel: TankModel? = null,
 )
 
 class SettingsViewModel(
@@ -57,7 +60,19 @@ class SettingsViewModel(
         _uiState.update { it.copy(deviceId = value, savedMessage = null) }
     }
 
-    fun selectTankPreset(model: TankModel, shape: String) {
+    fun selectFamily(family: TankFamily?) {
+        _uiState.update { it.copy(selectedFamily = family, selectedModel = null) }
+    }
+
+    fun selectModel(model: TankModel?) {
+        _uiState.update { it.copy(selectedModel = model) }
+    }
+
+    fun applySelectedPreset() {
+        val state = _uiState.value
+        val model = state.selectedModel ?: return
+        val shape = state.selectedFamily?.shape ?: return
+        
         viewModelScope.launch {
             val tankShape = if (shape == "rectangular") 1 else 0
             repository.updateConfig(
