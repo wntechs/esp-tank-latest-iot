@@ -28,6 +28,7 @@ class AppContainer(context: Context) {
 
     val deviceRepository = DeviceRepository(
         mqttManager = mqttManager,
-        settings = userSettingsFlow
+        settings = userSettingsFlow,
+        settingsStore = settingsStore
     )
 }

@@ -1,0 +1,207 @@
+{
+  "manufacturer": "Patton",
+  "unit": "mm",
+  "tank_families": [
+    {
+      "family": "cylindrical_vertical",
+      "shape": "cylinder_vertical",
+      "models": [
+        {
+          "code": "CVT-200",
+          "capacity_litres": 200,
+          "dimensions": {
+            "height_mm": 598,
+            "diameter_mm": 711
+          }
+        },
+        {
+          "code": "CVT-300",
+          "capacity_litres": 300,
+          "dimensions": {
+            "height_mm": 788,
+            "diameter_mm": 762
+          }
+        },
+        {
+          "code": "CVT-400",
+          "capacity_litres": 400,
+          "dimensions": {
+            "height_mm": 839,
+            "diameter_mm": 864
+          }
+        },
+        {
+          "code": "CVT-500",
+          "capacity_litres": 500,
+          "dimensions": {
+            "height_mm": 915,
+            "diameter_mm": 875
+          }
+        },
+        {
+          "code": "CVT-750",
+          "capacity_litres": 750,
+          "dimensions": {
+            "height_mm": 1090,
+            "diameter_mm": 966
+          }
+        },
+        {
+          "code": "CVT-1000",
+          "capacity_litres": 1000,
+          "dimensions": {
+            "height_mm": 1220,
+            "diameter_mm": 1067
+          }
+        },
+        {
+          "code": "CVT-1500",
+          "capacity_litres": 1500,
+          "dimensions": {
+            "height_mm": 1321,
+            "diameter_mm": 1296
+          }
+        },
+        {
+          "code": "CVT-2000",
+          "capacity_litres": 2000,
+          "dimensions": {
+            "height_mm": 1607,
+            "diameter_mm": 1386
+          }
+        },
+        {
+          "code": "CVT-2500",
+          "capacity_litres": 2500,
+          "dimensions": {
+            "height_mm": 1778,
+            "diameter_mm": 1474
+          }
+        },
+        {
+          "code": "CVT-3000",
+          "capacity_litres": 3000,
+          "dimensions": {
+            "height_mm": 1753,
+            "diameter_mm": 1575
+          }
+        },
+        {
+          "code": "CVT-4000",
+          "capacity_litres": 4000,
+          "dimensions": {
+            "height_mm": 1931,
+            "diameter_mm": 1778
+          }
+        },
+        {
+          "code": "CVT-5000",
+          "capacity_litres": 5000,
+          "dimensions": {
+            "height_mm": 1982,
+            "diameter_mm": 1950
+          }
+        },
+        {
+          "code": "CVT-6000",
+          "capacity_litres": 6000,
+          "dimensions": {
+            "height_mm": 2693,
+            "diameter_mm": 1778
+          }
+        },
+        {
+          "code": "CVT-10000",
+          "capacity_litres": 10000,
+          "dimensions": {
+            "height_mm": 2360,
+            "diameter_mm": 2464
+          }
+        }
+      ]
+    },
+    {
+      "family": "household",
+      "shape": "cylinder_vertical",
+      "models": [
+        {
+          "code": "HHT-100",
+          "capacity_litres": 100,
+          "dimensions": {
+            "height_mm": 715,
+            "diameter_mm": 485
+          }
+        }
+      ]
+    },
+    {
+      "family": "loft",
+      "shape": "rectangular",
+      "models": [
+        {
+          "code": "PLT-125",
+          "capacity_litres": 125,
+          "dimensions": {
+            "length_mm": 610,
+            "breadth_mm": 610,
+            "height_mm": 381
+          }
+        },
+        {
+          "code": "PLT-200",
+          "capacity_litres": 200,
+          "dimensions": {
+            "length_mm": 711,
+            "breadth_mm": 711,
+            "height_mm": 406
+          }
+        },
+        {
+          "code": "PLT-265",
+          "capacity_litres": 265,
+          "dimensions": {
+            "length_mm": 965,
+            "breadth_mm": 711,
+            "height_mm": 432
+          }
+        },
+        {
+          "code": "PLT-275",
+          "capacity_litres": 275,
+          "dimensions": {
+            "length_mm": 914,
+            "breadth_mm": 762,
+            "height_mm": 483
+          }
+        },
+        {
+          "code": "PLT-300",
+          "capacity_litres": 300,
+          "dimensions": {
+            "length_mm": 991,
+            "breadth_mm": 686,
+            "height_mm": 508
+          }
+        },
+        {
+          "code": "PLT-375",
+          "capacity_litres": 375,
+          "dimensions": {
+            "length_mm": 1092,
+            "breadth_mm": 991,
+            "height_mm": 406
+          }
+        },
+        {
+          "code": "PLT-475",
+          "capacity_litres": 475,
+          "dimensions": {
+            "length_mm": 1219,
+            "breadth_mm": 1016,
+            "height_mm": 406
+          }
+        }
+      ]
+    }
+  ]
+}

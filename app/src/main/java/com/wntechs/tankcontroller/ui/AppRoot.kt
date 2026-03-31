@@ -23,12 +23,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wntechs.tankcontroller.ui.screens.ConfigurationScreen
 import com.wntechs.tankcontroller.ui.screens.DashboardScreen
-import com.wntechs.tankcontroller.ui.screens.DeviceDiscoveryScreen
 import com.wntechs.tankcontroller.ui.screens.SettingsScreen
 import com.wntechs.tankcontroller.ui.screens.ManualControlScreen
 import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardViewModel
-
 import com.wntechs.tankcontroller.ui.viewmodel.SettingsViewModel
 
 @Composable
@@ -40,9 +38,6 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
 
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-
-    // Bottom bar is now always visible as Discovery screen is removed
-    val showBottomBar = true
 
     Scaffold(
         bottomBar = {
@@ -58,7 +53,6 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                         selected = currentRoute == route.route,
                         onClick = {
                             navController.navigate(route.route) {
-                                // Pop up to the start destination to avoid building a huge stack
                                 popUpTo(NavRoute.Dashboard.route) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
@@ -73,7 +67,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = NavRoute.Dashboard.route, // Change from Discovery to Dashboard
+            startDestination = NavRoute.Dashboard.route,
             modifier = Modifier.padding(padding),
         ) {
             composable(NavRoute.Dashboard.route) {
@@ -110,7 +104,8 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 SettingsScreen(
                     uiState = ui,
                     onBaseUrlChanged = settingsViewModel::updateBaseUrl,
-                    onDeviceIdChanged = settingsViewModel::updateDeviceId, // New Device ID handler
+                    onDeviceIdChanged = settingsViewModel::updateDeviceId,
+                    onSelectPreset = settingsViewModel::selectTankPreset,
                     onSave = settingsViewModel::save,
                 )
             }
