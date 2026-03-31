@@ -3,6 +3,7 @@ package com.wntechs.tankcontroller.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -30,7 +31,10 @@ fun ConfigurationScreen(
     onSave: () -> Unit,
 ) {
     val form = uiState.form
-    Scaffold(topBar = { TopAppBar(title = { Text("Tank Configuration") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("Tank Configuration") },
+        // Add this line to remove the automatic top padding
+        windowInsets = WindowInsets(0, 0, 0, 0)
+    ) }) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

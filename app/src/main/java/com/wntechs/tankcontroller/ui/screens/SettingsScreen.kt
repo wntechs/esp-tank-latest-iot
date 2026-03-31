@@ -3,6 +3,7 @@ package com.wntechs.tankcontroller.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -41,7 +42,10 @@ fun SettingsScreen(
     onApplyPreset: () -> Unit,
     onSave: () -> Unit,
 ) {
-    Scaffold(topBar = { TopAppBar(title = { Text("App Settings") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("App Settings") },
+        // Add this line to remove the automatic top padding
+        windowInsets = WindowInsets(0, 0, 0, 0)
+    ) }) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -85,7 +89,9 @@ fun SettingsScreen(
                             readOnly = true,
                             label = { Text("Tank Type") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = familyExpanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
                         )
                         ExposedDropdownMenu(
                             expanded = familyExpanded,
@@ -117,7 +123,9 @@ fun SettingsScreen(
                                 readOnly = true,
                                 label = { Text("Model / Capacity") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
                             )
                             ExposedDropdownMenu(
                                 expanded = modelExpanded,
@@ -156,7 +164,9 @@ fun SettingsScreen(
                             
                             Button(
                                 onClick = onApplyPreset,
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
                             ) {
                                 Text("Apply Preset to Device")
                             }

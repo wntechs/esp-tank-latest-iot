@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -37,7 +38,12 @@ fun DashboardScreen(
     onReturnAuto: () -> Unit,
     onOpenConfig: () -> Unit,
 ) {
-    Scaffold(topBar = { TopAppBar(title = { Text("Water Tank Dashboard") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(
+        title = { Text("Water Tank Dashboard") },
+        // Add this line to remove the automatic top padding
+        windowInsets = WindowInsets(0, 0, 0, 0)
+
+    ) }) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
