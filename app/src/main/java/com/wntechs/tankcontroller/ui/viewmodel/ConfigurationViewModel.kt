@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.wntechs.tankcontroller.data.model.ConfigResponse
 import com.wntechs.tankcontroller.data.model.ConfigUpdateRequest
 import com.wntechs.tankcontroller.data.repository.DeviceRepository
-import com.wntechs.tankcontroller.util.AppResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,8 +21,8 @@ data class ConfigurationForm(
     val sensorDeadZoneMm: String = "",
     val minValidDistanceMm: String = "",
     val maxValidDistanceMm: String = "",
-    val startLevelPercent: String = "",
-    val stopLevelPercent: String = "",
+    val startLevelPercent: Int = 0,
+    val stopLevelPercent: Int = 0,
     val minMotorRunSeconds: String = "",
     val minMotorOffSeconds: String = "",
     val sensorTimeoutSeconds: String = "",
@@ -32,10 +31,13 @@ data class ConfigurationForm(
 data class ConfigurationUiState(
     val loading: Boolean = false,
     val saving: Boolean = false,
+    val initialForm: ConfigurationForm? = null,
     val form: ConfigurationForm = ConfigurationForm(),
     val message: String? = null,
     val error: String? = null,
-)
+) {
+    val isDirty: Boolean get() = initialForm != null && form != initialForm
+}
 
 class ConfigurationViewModel(
     private val repository: DeviceRepository,
@@ -44,21 +46,21 @@ class ConfigurationViewModel(
     val uiState: StateFlow<ConfigurationUiState> = _uiState.asStateFlow()
 
     init {
-        // 1. Listen for Config Updates from MQTT
         viewModelScope.launch {
             repository.config.collect { config ->
+                val newForm = config.toForm()
                 _uiState.update {
                     it.copy(
                         loading = false,
                         saving = false,
-                        form = config.toForm(),
-                        message = if (it.saving) "Configuration updated" else null
+                        initialForm = if (it.initialForm == null) newForm else it.initialForm,
+                        form = if (it.initialForm == null) newForm else it.form,
+                        message = if (it.saving) "Configuration updated" else it.message
                     )
                 }
             }
         }
 
-        // 2. Listen for Errors from MQTT
         viewModelScope.launch {
             repository.errors.collect { errorMsg ->
                 _uiState.update { it.copy(loading = false, saving = false, error = errorMsg) }
@@ -69,9 +71,8 @@ class ConfigurationViewModel(
     }
 
     fun load() {
-        _uiState.update { it.copy(loading = true, error = null, message = null) }
-        // In MQTT, we send a command to the device to publish its current config
-        repository.requestUpdate() // Assuming this triggers 'get_config' via repository
+        _uiState.update { it.copy(loading = true, error = null, message = null, initialForm = null) }
+        repository.requestUpdate()
     }
 
     fun save() {
@@ -83,35 +84,29 @@ class ConfigurationViewModel(
         }
 
         _uiState.update { it.copy(saving = true, error = null, message = null) }
-        // Publish the new configuration to the 'cmd/config' topic
         repository.updateConfig(current.toRequest())
-
-        // Note: We don't handle Success/Error here.
-        // The UI will update when the device publishes the new config back to the status topic.
+        // Reset initialForm after save so button disables until next edit
+        _uiState.update { it.copy(initialForm = current) }
     }
 
-    fun update(transform: (ConfigurationForm) -> ConfigurationForm) {
-        _uiState.update { it.copy(form = transform(it.form)) }
+    fun updateField(transform: (ConfigurationForm) -> ConfigurationForm) {
+        _uiState.update { it.copy(form = transform(it.form), message = null, error = null) }
     }
 
     private fun validate(form: ConfigurationForm): String? {
-        val tankHeight = form.tankHeightMm.toIntOrNull() ?: return "tank_height_mm must be greater than 0"
-        val sensorTopOffset = form.sensorTopOffsetMm.toIntOrNull() ?: return "sensor_top_offset_mm is required"
-        val minValid = form.minValidDistanceMm.toIntOrNull() ?: return "min_valid_distance_mm is required"
-        val maxValid = form.maxValidDistanceMm.toIntOrNull() ?: return "max_valid_distance_mm is required"
-        val start = form.startLevelPercent.toIntOrNull() ?: return "start_level_percent is required"
-        val stop = form.stopLevelPercent.toIntOrNull() ?: return "stop_level_percent is required"
+        val tankHeight = form.tankHeightMm.toIntOrNull() ?: return "Tank height must be a number"
+        if (tankHeight <= 0) return "Tank height must be greater than 0"
+        
+        val sensorTopOffset = form.sensorTopOffsetMm.toIntOrNull() ?: return "Sensor top offset is required"
+        if (sensorTopOffset >= tankHeight) return "Sensor top offset must be less than tank height"
 
-        if (tankHeight <= 0) return "tank_height_mm must be greater than 0"
-        if (sensorTopOffset >= tankHeight) return "sensor_top_offset_mm must be less than tank_height_mm"
-        if (minValid >= maxValid) return "min_valid_distance_mm must be less than max_valid_distance_mm"
-        if (start >= stop) return "start_level_percent must be less than stop_level_percent"
-        if (stop > 100) return "stop_level_percent must be <= 100"
-        if (form.tankShape == 0 && (form.tankDiameterMm.toIntOrNull() ?: 0) <= 0) return "tank_diameter_mm must be greater than 0 for cylindrical tank"
+        if (form.startLevelPercent >= form.stopLevelPercent) return "Start level must be less than stop level"
+        
+        if (form.tankShape == 0 && (form.tankDiameterMm.toIntOrNull() ?: 0) <= 0) return "Diameter must be greater than 0"
         if (form.tankShape == 1) {
             val length = form.tankLengthMm.toIntOrNull() ?: 0
             val breadth = form.tankBreadthMm.toIntOrNull() ?: 0
-            if (length <= 0 || breadth <= 0) return "tank_length_mm and tank_breadth_mm must be greater than 0 for rectangular tank"
+            if (length <= 0 || breadth <= 0) return "Length and breadth must be greater than 0"
         }
         return null
     }
@@ -127,8 +122,8 @@ private fun ConfigResponse.toForm() = ConfigurationForm(
     sensorDeadZoneMm = sensorDeadZoneMm.toString(),
     minValidDistanceMm = minValidDistanceMm.toString(),
     maxValidDistanceMm = maxValidDistanceMm.toString(),
-    startLevelPercent = startLevelPercent.toString(),
-    stopLevelPercent = stopLevelPercent.toString(),
+    startLevelPercent = startLevelPercent,
+    stopLevelPercent = stopLevelPercent,
     minMotorRunSeconds = minMotorRunSeconds.toString(),
     minMotorOffSeconds = minMotorOffSeconds.toString(),
     sensorTimeoutSeconds = sensorTimeoutSeconds.toString(),
@@ -144,8 +139,8 @@ private fun ConfigurationForm.toRequest() = ConfigUpdateRequest(
     sensorDeadZoneMm = sensorDeadZoneMm.toIntOrNull(),
     minValidDistanceMm = minValidDistanceMm.toIntOrNull(),
     maxValidDistanceMm = maxValidDistanceMm.toIntOrNull(),
-    startLevelPercent = startLevelPercent.toIntOrNull(),
-    stopLevelPercent = stopLevelPercent.toIntOrNull(),
+    startLevelPercent = startLevelPercent,
+    stopLevelPercent = stopLevelPercent,
     minMotorRunSeconds = minMotorRunSeconds.toIntOrNull(),
     minMotorOffSeconds = minMotorOffSeconds.toIntOrNull(),
     sensorTimeoutSeconds = sensorTimeoutSeconds.toIntOrNull(),

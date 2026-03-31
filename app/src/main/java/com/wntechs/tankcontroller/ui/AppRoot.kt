@@ -94,7 +94,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 val ui by configurationViewModel.uiState.collectAsStateWithLifecycle()
                 ConfigurationScreen(
                     uiState = ui,
-                    onRefresh = configurationViewModel::load,
+                    onUpdateField = configurationViewModel::updateField,
                     onSave = configurationViewModel::save,
                 )
             }
