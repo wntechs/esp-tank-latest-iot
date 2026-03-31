@@ -5,11 +5,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -27,6 +30,7 @@ import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.SettingsViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(factory: ViewModelProvider.Factory) {
     val navController = rememberNavController()
@@ -37,7 +41,23 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
 
+    // Define titles for your routes
+    val title = when (currentRoute) {
+        NavRoute.Dashboard.route -> "Water Tank Dashboard"
+        NavRoute.Config.route -> "Tank Configuration"
+        NavRoute.Settings.route -> "App Settings"
+        else -> "Tank Controller"
+    }
+
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title) },
+                // This is the "magic" line. It handles the status bar height
+                // correctly without adding the extra material3 padding.
+                windowInsets = TopAppBarDefaults.windowInsets
+            )
+        },
         bottomBar = {
             NavigationBar {
                 val items = listOf(
