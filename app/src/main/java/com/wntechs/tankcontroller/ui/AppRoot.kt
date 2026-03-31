@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -24,7 +23,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wntechs.tankcontroller.ui.screens.ConfigurationScreen
 import com.wntechs.tankcontroller.ui.screens.DashboardScreen
 import com.wntechs.tankcontroller.ui.screens.SettingsScreen
-import com.wntechs.tankcontroller.ui.screens.ManualControlScreen
 import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.SettingsViewModel
@@ -44,7 +42,6 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
             NavigationBar {
                 val items = listOf(
                     NavRoute.Dashboard to ("Dashboard" to Icons.Default.Home),
-                    NavRoute.Manual to ("Manual" to Icons.Default.PowerSettingsNew),
                     NavRoute.Config to ("Config" to Icons.Default.Build),
                     NavRoute.Settings to ("Settings" to Icons.Default.Settings),
                 )
@@ -74,19 +71,10 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 val ui by dashboardViewModel.uiState.collectAsStateWithLifecycle()
                 DashboardScreen(
                     uiState = ui,
-                    onRefresh = dashboardViewModel::refresh,
-                    onOpenManual = { navController.navigate(NavRoute.Manual.route) },
-                    onOpenConfig = { navController.navigate(NavRoute.Config.route) },
-                )
-            }
-
-            composable(NavRoute.Manual.route) {
-                val ui by dashboardViewModel.uiState.collectAsStateWithLifecycle()
-                ManualControlScreen(
-                    uiState = ui,
                     onTurnOn = { dashboardViewModel.turnManual(true) },
                     onTurnOff = { dashboardViewModel.turnManual(false) },
                     onReturnAuto = dashboardViewModel::returnAuto,
+                    onOpenConfig = { navController.navigate(NavRoute.Config.route) },
                 )
             }
 
