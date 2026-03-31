@@ -6,6 +6,7 @@ import com.wntechs.tankcontroller.data.model.ConfigUpdateRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -19,7 +20,9 @@ class DeviceRepository(
 
     init {
         CoroutineScope(Dispatchers.IO).launch {
-            settings.collect { currentDeviceId = it.deviceId }
+            settings.collect {
+                currentDeviceId = it.deviceId
+            }
         }
     }
 
@@ -29,6 +32,23 @@ class DeviceRepository(
     val isOnline = mqttManager.isDeviceOnline
 
     fun connect(url: String, deviceId: String) = mqttManager.connect(url, deviceId)
+
+    /**
+     * Forces a disconnection and reconnects using the latest settings stored in DataStore.
+     * Call this after saving new connection parameters in the Settings screen.
+     */
+    fun reconnect() {
+        CoroutineScope(Dispatchers.IO).launch {
+            // 1. Get the latest settings from the Flow (first() takes current value and completes)
+            val currentSettings = settings.first()
+
+            // 2. Disconnect existing client
+            mqttManager.disconnect()
+
+            // 3. Connect with new parameters
+            mqttManager.connect(currentSettings.baseUrl, currentSettings.deviceId)
+        }
+    }
 
     fun requestUpdate() = mqttManager.publish("tank/$currentDeviceId/cmd/get_status")
 

@@ -93,6 +93,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             repository.saveBaseUrl(state.baseUrl)
             repository.saveDeviceId(state.deviceId)
+            repository.reconnect()
             _uiState.update { it.copy(savedMessage = "Settings saved successfully") }
         }
     }
