@@ -23,18 +23,19 @@ class AppContainer(context: Context) {
                 .replace("http://", "")
                 .replace("https://", "")
                 .split(":")[0],
-            deviceId = settings.deviceId.ifBlank { "relay1" }
+            deviceId = settings.deviceId // Removed .ifBlank { "relay1" }
         )
     }
 
-    val deviceRepository = DeviceRepository(
-        mqttManager = mqttManager,
-        settings = userSettingsFlow,
+    val userRepository = UserRepository(
+        authApi = apiClientFactory.createAuthApi(),
         settingsStore = settingsStore
     )
 
-    val userRepository = UserRepository(
-        authApi = apiClientFactory.createAuthApi(),
+    val deviceRepository = DeviceRepository(
+        mqttManager = mqttManager,
+        userRepository = userRepository,
+        settings = userSettingsFlow,
         settingsStore = settingsStore
     )
 }

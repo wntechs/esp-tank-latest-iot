@@ -2,6 +2,13 @@ package com.wntechs.tankcontroller.data.repository
 
 import com.wntechs.tankcontroller.data.local.SettingsStore
 import com.wntechs.tankcontroller.data.model.LoginRequest
+import com.wntechs.tankcontroller.data.model.MqttCredentials
+import com.wntechs.tankcontroller.data.model.MqttCredentialsRequest
+import com.wntechs.tankcontroller.data.model.MqttRefreshRequest
+import com.wntechs.tankcontroller.data.model.PairingClaimRequest
+import com.wntechs.tankcontroller.data.model.PairingResponse
+import com.wntechs.tankcontroller.data.model.PairingStartRequest
+import com.wntechs.tankcontroller.data.model.ProvisioningStatusResponse
 import com.wntechs.tankcontroller.data.model.RegisterRequest
 import com.wntechs.tankcontroller.data.model.ValidationErrorResponse
 import com.wntechs.tankcontroller.data.remote.AuthApi
@@ -14,6 +21,7 @@ class UserRepository(
     private val settingsStore: SettingsStore
 ) {
     val authState = settingsStore.authFlow
+    val mqttCreds = settingsStore.mqttCredsFlow
 
     suspend fun register(request: RegisterRequest): AppResult<Unit> {
         return try {
@@ -47,24 +55,96 @@ class UserRepository(
         }
     }
 
-    private suspend fun handleAuthResponse(response: Response<com.wntechs.tankcontroller.data.model.AuthResponse>): AppResult<Unit> {
+    suspend fun startPairing(code: String): AppResult<PairingResponse> {
+        return try {
+            val response = authApi.startPairing(PairingStartRequest(code))
+            if (response.isSuccessful) {
+                AppResult.Success(response.body()!!)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun claimDevice(token: String): AppResult<PairingResponse> {
+        return try {
+            val response = authApi.claimDevice(PairingClaimRequest(token))
+            if (response.isSuccessful) {
+                AppResult.Success(response.body()!!)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun getProvisioningStatus(uuid: String, token: String): AppResult<ProvisioningStatusResponse> {
+        return try {
+            val response = authApi.getProvisioningStatus(uuid, token)
+            if (response.isSuccessful) {
+                AppResult.Success(response.body()!!)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun getMqttCredentials(deviceUuid: String, deviceName: String): AppResult<MqttCredentials> {
+        return try {
+            val response = authApi.getMqttCredentials(MqttCredentialsRequest(deviceUuid, deviceName))
+            if (response.isSuccessful) {
+                val creds = response.body()?.data?.mqtt ?: return AppResult.Error("Empty response body")
+                settingsStore.saveMqttCreds(creds)
+                AppResult.Success(creds)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun refreshMqttCredentials(deviceUuid: String, clientId: String): AppResult<MqttCredentials> {
+        return try {
+            val response = authApi.refreshMqttCredentials(MqttRefreshRequest(deviceUuid, clientId))
+            if (response.isSuccessful) {
+                val creds = response.body()?.data?.mqtt ?: return AppResult.Error("Empty response body")
+                settingsStore.saveMqttCreds(creds)
+                AppResult.Success(creds)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    private suspend fun <T : com.wntechs.tankcontroller.data.model.AuthResponse> handleAuthResponse(response: Response<T>): AppResult<Unit> {
         if (response.isSuccessful) {
             val body = response.body() ?: return AppResult.Error("Empty response body")
             settingsStore.saveAuth(body.token, body.user.name, body.user.email)
             return AppResult.Success(Unit)
         } else {
-            val errorBody = response.errorBody()?.string()
-            val message = if (errorBody != null) {
-                try {
-                    val errorRes = Json.decodeFromString<ValidationErrorResponse>(errorBody)
-                    errorRes.message + (errorRes.errors?.let { ": " + it.values.flatten().joinToString(", ") } ?: "")
-                } catch (e: Exception) {
-                    "Error code: ${response.code()}"
-                }
-            } else {
+            return AppResult.Error(parseError(response))
+        }
+    }
+
+    private fun parseError(response: Response<*>): String {
+        val errorBody = response.errorBody()?.string()
+        return if (errorBody != null) {
+            try {
+                val errorRes = Json.decodeFromString<ValidationErrorResponse>(errorBody)
+                errorRes.message + (errorRes.errors?.let { ": " + it.values.flatten().joinToString(", ") } ?: "")
+            } catch (e: Exception) {
                 "Error code: ${response.code()}"
             }
-            return AppResult.Error(message)
+        } else {
+            "Error code: ${response.code()}"
         }
     }
 }

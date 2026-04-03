@@ -3,8 +3,11 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.wntechs.tankcontroller.data.model.MqttCredentials
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private val Context.dataStore by preferencesDataStore(name = "water_tank_settings")
 
@@ -15,12 +18,13 @@ class SettingsStore(private val context: Context) {
         val authToken = stringPreferencesKey("auth_token")
         val userName = stringPreferencesKey("user_name")
         val userEmail = stringPreferencesKey("user_email")
+        val mqttCreds = stringPreferencesKey("mqtt_creds")
     }
 
     val settingsFlow: Flow<DeviceConnectionSettings> = context.dataStore.data.map { prefs ->
         DeviceConnectionSettings(
             baseUrl = prefs[Keys.baseUrl] ?: "192.46.215.185",
-            deviceId = prefs[Keys.deviceId] ?: "relay1"
+            deviceId = prefs[Keys.deviceId] ?: ""
         )
     }
 
@@ -30,6 +34,12 @@ class SettingsStore(private val context: Context) {
             name = prefs[Keys.userName],
             email = prefs[Keys.userEmail]
         )
+    }
+
+    val mqttCredsFlow: Flow<MqttCredentials?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.mqttCreds]?.let { 
+            try { Json.decodeFromString<MqttCredentials>(it) } catch (e: Exception) { null }
+        }
     }
 
     suspend fun saveBaseUrl(url: String) {
@@ -52,11 +62,19 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveMqttCreds(creds: MqttCredentials) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.mqttCreds] = Json.encodeToString(creds)
+        }
+    }
+
     suspend fun clearAuth() {
         context.dataStore.edit { prefs ->
             prefs.remove(Keys.authToken)
             prefs.remove(Keys.userName)
             prefs.remove(Keys.userEmail)
+            prefs.remove(Keys.mqttCreds)
+            prefs.remove(Keys.deviceId)
         }
     }
 }

@@ -91,9 +91,9 @@ class SettingsViewModel(
     fun save() {
         val state = _uiState.value
         viewModelScope.launch {
-            repository.saveBaseUrl(state.baseUrl)
+           /* repository.saveBaseUrl(state.baseUrl)
             repository.saveDeviceId(state.deviceId)
-            repository.reconnect()
+            repository.reconnect()*/
             _uiState.update { it.copy(savedMessage = "Settings saved successfully") }
         }
     }

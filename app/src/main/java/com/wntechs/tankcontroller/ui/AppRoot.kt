@@ -2,6 +2,7 @@ package com.wntechs.tankcontroller.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -26,12 +27,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wntechs.tankcontroller.ui.screens.ConfigurationScreen
 import com.wntechs.tankcontroller.ui.screens.DashboardScreen
+import com.wntechs.tankcontroller.ui.screens.DeviceDiscoveryScreen
 import com.wntechs.tankcontroller.ui.screens.LoginScreen
 import com.wntechs.tankcontroller.ui.screens.RegisterScreen
 import com.wntechs.tankcontroller.ui.screens.SettingsScreen
 import com.wntechs.tankcontroller.ui.viewmodel.AuthViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardViewModel
+import com.wntechs.tankcontroller.ui.viewmodel.PairingViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,20 +45,37 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
     val dashboardViewModel: DashboardViewModel = viewModel(factory = factory)
     val configurationViewModel: ConfigurationViewModel = viewModel(factory = factory)
     val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
+    val pairingViewModel: PairingViewModel = viewModel(factory = factory)
 
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
+    val pairingUiState by pairingViewModel.uiState.collectAsStateWithLifecycle()
 
     // Automatic redirection based on Auth state
     LaunchedEffect(authUiState.isLoggedIn) {
         if (authUiState.isLoggedIn) {
-            navController.navigate(NavRoute.Dashboard.route) {
-                popUpTo(0) { inclusive = true }
+            // Redirect to Dashboard after login if on an auth screen
+            if (currentRoute == NavRoute.Login.route || currentRoute == NavRoute.Register.route || currentRoute == null) {
+                navController.navigate(NavRoute.Dashboard.route) {
+                    popUpTo(0) { inclusive = true }
+                }
             }
         } else {
-            navController.navigate(NavRoute.Login.route) {
-                popUpTo(0) { inclusive = true }
+            // Redirect to Login if logged out
+            if (currentRoute != NavRoute.Login.route && currentRoute != NavRoute.Register.route) {
+                navController.navigate(NavRoute.Login.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
+    }
+
+    // Redirect to Dashboard after successful pairing
+    LaunchedEffect(pairingUiState.pairingSuccess) {
+        if (pairingUiState.pairingSuccess) {
+            navController.navigate(NavRoute.Dashboard.route) {
+                popUpTo(NavRoute.Discovery.route) { inclusive = true }
             }
         }
     }
@@ -66,6 +86,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
         NavRoute.Dashboard.route -> "Water Tank Dashboard"
         NavRoute.Config.route -> "Tank Configuration"
         NavRoute.Settings.route -> "App Settings"
+        NavRoute.Discovery.route -> "Pair New Device"
         else -> "Tank Controller"
     }
 
@@ -80,11 +101,12 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
             if (authUiState.isLoggedIn) {
                 NavigationBar {
                     val items = listOf(
-                        NavRoute.Dashboard to ("Dashboard" to Icons.Default.Home),
-                        NavRoute.Config to ("Config" to Icons.Default.Build),
-                        NavRoute.Settings to ("Settings" to Icons.Default.Settings),
+                        Triple(NavRoute.Dashboard, "Dashboard", Icons.Default.Home),
+                        Triple(NavRoute.Discovery, "Add", Icons.Default.Add),
+                        Triple(NavRoute.Config, "Config", Icons.Default.Build),
+                        Triple(NavRoute.Settings, "Settings", Icons.Default.Settings),
                     )
-                    items.forEach { (route, meta) ->
+                    items.forEach { (route, label, icon) ->
                         NavigationBarItem(
                             selected = currentRoute == route.route,
                             onClick = {
@@ -94,8 +116,8 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(meta.second, null) },
-                            label = { Text(meta.first) },
+                            icon = { Icon(icon, null) },
+                            label = { Text(label) },
                         )
                     }
                 }
@@ -123,6 +145,13 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 )
             }
 
+            composable(NavRoute.Discovery.route) {
+                DeviceDiscoveryScreen(
+                    uiState = pairingUiState,
+                    onStartPairing = pairingViewModel::startPairing
+                )
+            }
+
             composable(NavRoute.Dashboard.route) {
                 val ui by dashboardViewModel.uiState.collectAsStateWithLifecycle()
                 DashboardScreen(
@@ -131,6 +160,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                     onTurnOff = { dashboardViewModel.turnManual(false) },
                     onReturnAuto = dashboardViewModel::returnAuto,
                     onOpenConfig = { navController.navigate(NavRoute.Config.route) },
+                    onNavigateToDiscovery = { navController.navigate(NavRoute.Discovery.route) }
                 )
             }
 

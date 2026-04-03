@@ -6,4 +6,5 @@ sealed class NavRoute(val route: String) {
     data object Dashboard : NavRoute("dashboard")
     data object Config : NavRoute("config")
     data object Settings : NavRoute("settings")
+    data object Discovery : NavRoute("discovery")
 }

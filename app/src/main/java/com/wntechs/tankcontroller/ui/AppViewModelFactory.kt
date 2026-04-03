@@ -6,6 +6,7 @@ import com.wntechs.tankcontroller.data.AppContainer
 import com.wntechs.tankcontroller.ui.viewmodel.AuthViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardViewModel
+import com.wntechs.tankcontroller.ui.viewmodel.PairingViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.SettingsViewModel
 
 class AppViewModelFactory(
@@ -19,6 +20,7 @@ class AppViewModelFactory(
             modelClass.isAssignableFrom(ConfigurationViewModel::class.java) -> ConfigurationViewModel(container.deviceRepository) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(container.deviceRepository, tankMeasurementsJson) as T
             modelClass.isAssignableFrom(AuthViewModel::class.java) -> AuthViewModel(container.userRepository) as T
+            modelClass.isAssignableFrom(PairingViewModel::class.java) -> PairingViewModel(container.userRepository, container.deviceRepository) as T
             else -> error("Unknown ViewModel class: ${modelClass.name}")
         }
     }
