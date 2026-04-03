@@ -12,14 +12,23 @@ class SettingsStore(private val context: Context) {
     private object Keys {
         val baseUrl = stringPreferencesKey("mqtt_broker_url")
         val deviceId = stringPreferencesKey("mqtt_device_id")
+        val authToken = stringPreferencesKey("auth_token")
+        val userName = stringPreferencesKey("user_name")
+        val userEmail = stringPreferencesKey("user_email")
     }
 
-    // This flow now only emits settings relevant to the MQTT architecture
     val settingsFlow: Flow<DeviceConnectionSettings> = context.dataStore.data.map { prefs ->
         DeviceConnectionSettings(
-            // Defaulting to your specific IP as requested earlier
             baseUrl = prefs[Keys.baseUrl] ?: "192.46.215.185",
             deviceId = prefs[Keys.deviceId] ?: "relay1"
+        )
+    }
+
+    val authFlow: Flow<AuthState> = context.dataStore.data.map { prefs ->
+        AuthState(
+            token = prefs[Keys.authToken],
+            name = prefs[Keys.userName],
+            email = prefs[Keys.userEmail]
         )
     }
 
@@ -35,19 +44,32 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    // Optional: Single function to save both at once if needed
-    suspend fun saveSettings(url: String, deviceId: String) {
+    suspend fun saveAuth(token: String, name: String, email: String) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.baseUrl] = url
-            prefs[Keys.deviceId] = deviceId
+            prefs[Keys.authToken] = token
+            prefs[Keys.userName] = name
+            prefs[Keys.userEmail] = email
+        }
+    }
+
+    suspend fun clearAuth() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.authToken)
+            prefs.remove(Keys.userName)
+            prefs.remove(Keys.userEmail)
         }
     }
 }
 
-/**
- * Data class representing the MQTT connection parameters.
- */
 data class DeviceConnectionSettings(
     val baseUrl: String,
     val deviceId: String,
 )
+
+data class AuthState(
+    val token: String?,
+    val name: String?,
+    val email: String?
+) {
+    val isLoggedIn: Boolean get() = token != null
+}
