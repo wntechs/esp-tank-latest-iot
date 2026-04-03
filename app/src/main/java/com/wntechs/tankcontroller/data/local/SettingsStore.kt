@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wntechs.tankcontroller.data.model.MqttCredentials
+import com.wntechs.tankcontroller.data.model.OwnedDevice
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
@@ -19,7 +20,10 @@ class SettingsStore(private val context: Context) {
         val userName = stringPreferencesKey("user_name")
         val userEmail = stringPreferencesKey("user_email")
         val mqttCreds = stringPreferencesKey("mqtt_creds")
+        val deviceList = stringPreferencesKey("device_list")
     }
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     val settingsFlow: Flow<DeviceConnectionSettings> = context.dataStore.data.map { prefs ->
         DeviceConnectionSettings(
@@ -38,8 +42,14 @@ class SettingsStore(private val context: Context) {
 
     val mqttCredsFlow: Flow<MqttCredentials?> = context.dataStore.data.map { prefs ->
         prefs[Keys.mqttCreds]?.let { 
-            try { Json.decodeFromString<MqttCredentials>(it) } catch (e: Exception) { null }
+            try { json.decodeFromString<MqttCredentials>(it) } catch (e: Exception) { null }
         }
+    }
+
+    val deviceListFlow: Flow<List<OwnedDevice>> = context.dataStore.data.map { prefs ->
+        prefs[Keys.deviceList]?.let {
+            try { json.decodeFromString<List<OwnedDevice>>(it) } catch (e: Exception) { emptyList() }
+        } ?: emptyList()
     }
 
     suspend fun saveBaseUrl(url: String) {
@@ -68,6 +78,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveDeviceList(devices: List<OwnedDevice>) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.deviceList] = json.encodeToString(devices)
+        }
+    }
+
     suspend fun clearAuth() {
         context.dataStore.edit { prefs ->
             prefs.remove(Keys.authToken)
@@ -75,6 +91,7 @@ class SettingsStore(private val context: Context) {
             prefs.remove(Keys.userEmail)
             prefs.remove(Keys.mqttCreds)
             prefs.remove(Keys.deviceId)
+            prefs.remove(Keys.deviceList)
         }
     }
 }

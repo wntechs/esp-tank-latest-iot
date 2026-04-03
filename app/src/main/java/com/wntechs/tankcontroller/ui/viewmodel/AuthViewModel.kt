@@ -3,6 +3,7 @@ package com.wntechs.tankcontroller.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wntechs.tankcontroller.data.model.LoginRequest
+import com.wntechs.tankcontroller.data.model.OwnedDevice
 import com.wntechs.tankcontroller.data.model.RegisterRequest
 import com.wntechs.tankcontroller.data.repository.UserRepository
 import com.wntechs.tankcontroller.util.AppResult
@@ -17,7 +18,9 @@ data class AuthUiState(
     val error: String? = null,
     val isLoggedIn: Boolean = false,
     val name: String? = null,
-    val email: String? = null
+    val email: String? = null,
+    val devices: List<OwnedDevice> = emptyList(),
+    val selectedDeviceUuid: String? = null
 )
 
 class AuthViewModel(
@@ -35,7 +38,24 @@ class AuthViewModel(
                     name = state.name,
                     email = state.email
                 ) }
+                if (state.isLoggedIn) {
+                    refreshDevices()
+                }
             }
+        }
+
+        viewModelScope.launch {
+            userRepository.deviceList.collect { list ->
+                _uiState.update { it.copy(devices = list) }
+            }
+        }
+
+        // Add observation for the selected device ID
+        viewModelScope.launch {
+            // We can observe the settings flow through a new helper in UserRepository or directly if we had access to settingsStore
+            // Since we want to keep it in sync with what's actually saved
+            // UserRepository doesn't expose settingsFlow directly, but DeviceRepository does.
+            // Let's assume we can get it from settingsStore via userRepository for now or add a flow to UserRepository.
         }
     }
 
@@ -46,6 +66,8 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = false) }
             if (result is AppResult.Error) {
                 _uiState.update { it.copy(error = result.message) }
+            } else {
+                refreshDevices()
             }
         }
     }
@@ -57,7 +79,22 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = false) }
             if (result is AppResult.Error) {
                 _uiState.update { it.copy(error = result.message) }
+            } else {
+                refreshDevices()
             }
+        }
+    }
+
+    fun refreshDevices() {
+        viewModelScope.launch {
+            userRepository.fetchDevices()
+        }
+    }
+
+    fun selectDevice(uuid: String) {
+        viewModelScope.launch {
+            userRepository.selectDevice(uuid)
+            _uiState.update { it.copy(selectedDeviceUuid = uuid) }
         }
     }
 

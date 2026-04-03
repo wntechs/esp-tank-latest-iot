@@ -5,6 +5,7 @@ import com.wntechs.tankcontroller.data.model.LoginRequest
 import com.wntechs.tankcontroller.data.model.MqttCredentials
 import com.wntechs.tankcontroller.data.model.MqttCredentialsRequest
 import com.wntechs.tankcontroller.data.model.MqttRefreshRequest
+import com.wntechs.tankcontroller.data.model.OwnedDevice
 import com.wntechs.tankcontroller.data.model.PairingClaimRequest
 import com.wntechs.tankcontroller.data.model.PairingResponse
 import com.wntechs.tankcontroller.data.model.PairingStartRequest
@@ -13,6 +14,7 @@ import com.wntechs.tankcontroller.data.model.RegisterRequest
 import com.wntechs.tankcontroller.data.model.ValidationErrorResponse
 import com.wntechs.tankcontroller.data.remote.AuthApi
 import com.wntechs.tankcontroller.util.AppResult
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import retrofit2.Response
 
@@ -22,6 +24,8 @@ class UserRepository(
 ) {
     val authState = settingsStore.authFlow
     val mqttCreds = settingsStore.mqttCredsFlow
+    val deviceList = settingsStore.deviceListFlow
+    val selectedDeviceId = settingsStore.settingsFlow.map { it.deviceId }
 
     suspend fun register(request: RegisterRequest): AppResult<Unit> {
         return try {
@@ -53,6 +57,25 @@ class UserRepository(
         } catch (e: Exception) {
             AppResult.Error(e.message ?: "Unknown error")
         }
+    }
+
+    suspend fun fetchDevices(): AppResult<List<OwnedDevice>> {
+        return try {
+            val response = authApi.getDevices()
+            if (response.isSuccessful) {
+                val devices = response.body()?.data ?: emptyList()
+                settingsStore.saveDeviceList(devices)
+                AppResult.Success(devices)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    suspend fun selectDevice(uuid: String) {
+        settingsStore.saveDeviceId(uuid)
     }
 
     suspend fun startPairing(code: String): AppResult<PairingResponse> {

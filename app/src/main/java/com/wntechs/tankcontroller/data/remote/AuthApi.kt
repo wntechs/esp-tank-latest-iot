@@ -1,6 +1,7 @@
 package com.wntechs.tankcontroller.data.remote
 
 import com.wntechs.tankcontroller.data.model.AuthResponse
+import com.wntechs.tankcontroller.data.model.DeviceListResponse
 import com.wntechs.tankcontroller.data.model.LoginRequest
 import com.wntechs.tankcontroller.data.model.MessageResponse
 import com.wntechs.tankcontroller.data.model.MqttCredentialsRequest
@@ -45,4 +46,7 @@ interface AuthApi {
         @Query("uuid") uuid: String,
         @Query("token") token: String
     ): Response<ProvisioningStatusResponse>
+
+    @GET("devices")
+    suspend fun getDevices(): Response<DeviceListResponse>
 }
