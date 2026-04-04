@@ -57,14 +57,13 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
     val pairingViewModel: PairingViewModel = viewModel(factory = factory)
 
     val backStack by navController.currentBackStackEntryAsState()
-    val currentRoute = backStack?.destination?.route
+    val currentRoute = backStack?.destination?.route ?: NavRoute.Splash.route
     val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
     val pairingUiState by pairingViewModel.uiState.collectAsStateWithLifecycle()
 
     val isAuthScreen = currentRoute == NavRoute.Login.route || 
                       currentRoute == NavRoute.Register.route || 
-                      currentRoute == NavRoute.Splash.route ||
-                      currentRoute == null
+                      currentRoute == NavRoute.Splash.route
 
     // Redirection Logic
     LaunchedEffect(authUiState.isInitializing, authUiState.isLoggedIn, currentRoute) {
@@ -178,7 +177,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
         NavHost(
             navController = navController,
             startDestination = NavRoute.Splash.route,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
         ) {
             composable(NavRoute.Splash.route) {
                 SplashScreen()
@@ -190,38 +189,38 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 RegisterScreen(uiState = authUiState, onRegister = authViewModel::register, onNavigateToLogin = { navController.navigate(NavRoute.Login.route) })
             }
             composable(NavRoute.Discovery.route) {
-                Box(modifier = Modifier.padding(innerPadding)) {
-                    DeviceDiscoveryScreen(uiState = pairingUiState, onStartPairing = pairingViewModel::startPairing)
-                }
+                DeviceDiscoveryScreen(uiState = pairingUiState, onStartPairing = pairingViewModel::startPairing)
             }
             composable(NavRoute.Dashboard.route) {
                 val ui by dashboardViewModel.uiState.collectAsStateWithLifecycle()
-                Box(modifier = Modifier.padding(innerPadding)) {
-                    DashboardScreen(
-                        uiState = ui,
-                        onTurnOn = { dashboardViewModel.turnManual(true) },
-                        onTurnOff = { dashboardViewModel.turnManual(false) },
-                        onReturnAuto = dashboardViewModel::returnAuto,
-                        onOpenConfig = { navController.navigate(NavRoute.Config.route) },
-                        onNavigateToDiscovery = { 
-                            navController.navigate(NavRoute.Discovery.route) {
-                                launchSingleTop = true
-                            }
+                DashboardScreen(
+                    uiState = ui,
+                    onTurnOn = { dashboardViewModel.turnManual(true) },
+                    onTurnOff = { dashboardViewModel.turnManual(false) },
+                    onReturnAuto = dashboardViewModel::returnAuto,
+                    onOpenConfig = { navController.navigate(NavRoute.Config.route) },
+                    onNavigateToDiscovery = { 
+                        navController.navigate(NavRoute.Discovery.route) {
+                            launchSingleTop = true
                         }
-                    )
-                }
+                    }
+                )
             }
             composable(NavRoute.Config.route) {
                 val ui by configurationViewModel.uiState.collectAsStateWithLifecycle()
-                Box(modifier = Modifier.padding(innerPadding)) {
-                    ConfigurationScreen(uiState = ui, onUpdateField = configurationViewModel::updateField, onSave = configurationViewModel::save)
-                }
+                ConfigurationScreen(uiState = ui, onUpdateField = configurationViewModel::updateField, onSave = configurationViewModel::save)
             }
             composable(NavRoute.Settings.route) {
                 val ui by settingsViewModel.uiState.collectAsStateWithLifecycle()
-                Box(modifier = Modifier.padding(innerPadding)) {
-                    SettingsScreen(uiState = ui, authUiState = authUiState, onBaseUrlChanged = settingsViewModel::updateBaseUrl, onDeviceIdChanged = settingsViewModel::updateDeviceId, onFamilySelected = settingsViewModel::selectFamily, onModelSelected = settingsViewModel::selectModel, onApplyPreset = settingsViewModel::applySelectedPreset, onSave = settingsViewModel::save, onLogout = authViewModel::logout)
-                }
+                SettingsScreen(
+                    uiState = ui,
+                    authUiState = authUiState,
+                    onFamilySelected = settingsViewModel::selectFamily,
+                    onModelSelected = settingsViewModel::selectModel,
+                    onApplyPreset = settingsViewModel::applySelectedPreset,
+                    onLogout = authViewModel::logout,
+                    onResetDevice = settingsViewModel::resetDevice
+                )
             }
         }
     }

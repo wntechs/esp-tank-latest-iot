@@ -86,6 +86,19 @@ class UserRepository(
         settingsStore.saveDeviceId(uuid)
     }
 
+    suspend fun resetDevice(uuid: String): AppResult<Unit> {
+        return try {
+            val response = authApi.resetDevice(uuid)
+            if (response.isSuccessful) {
+                AppResult.Success(Unit)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun startPairing(code: String): AppResult<PairingResponse> {
         return try {
             val response = authApi.startPairing(PairingStartRequest(code))

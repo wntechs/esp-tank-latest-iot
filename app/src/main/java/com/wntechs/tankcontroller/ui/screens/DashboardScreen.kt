@@ -55,7 +55,7 @@ fun DashboardScreen(
         // Connection Status Header
         ConnectionStatusCard(uiState.connectionState)
 
-        if (uiState.baseUrl.isBlank()) {
+        if (uiState.deviceId.isBlank()) {
             SectionCard("No Device Paired") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("You haven't paired any water tank controller yet.")
@@ -80,7 +80,7 @@ fun DashboardScreen(
                 StatusCard("Motor", if (uiState.status.motorOn) "ON" else "OFF")
                 StatusCard("Mode", if (uiState.status.manualOverride) "MANUAL" else "AUTO")
                 StatusCard("Reading", if (uiState.status.readingValid) "VALID" else "INVALID")
-                StatusCard("Device UUID", uiState.baseUrl)
+                StatusCard("Device UUID", uiState.deviceId)
             }
 
             // Manual Relay Control Section
@@ -188,7 +188,7 @@ fun DashboardPreview() {
     TankControllerTheme {
         DashboardScreen(
             uiState = DashboardUiState(
-                baseUrl = "dca344fb-f89e-478f-8f5a-8d34c3486f77",
+                deviceId = "dca344fb-f89e-478f-8f5a-8d34c3486f77",
                 status = StatusResponse(
                     motorOn = true,
                     autoModeEnabled = false,
@@ -206,7 +206,7 @@ fun DashboardPreview() {
             onTurnOff = {},
             onReturnAuto = {},
             onOpenConfig = {},
-            onNavigateToDiscovery = {}
+            onNavigateToDiscovery = {},
         )
     }
 }

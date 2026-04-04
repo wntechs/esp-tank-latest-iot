@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,14 +41,38 @@ import com.wntechs.tankcontroller.ui.viewmodel.SettingsUiState
 fun SettingsScreen(
     uiState: SettingsUiState,
     authUiState: AuthUiState,
-    onBaseUrlChanged: (String) -> Unit,
-    onDeviceIdChanged: (String) -> Unit,
     onFamilySelected: (TankFamily?) -> Unit,
     onModelSelected: (TankModel?) -> Unit,
     onApplyPreset: () -> Unit,
-    onSave: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onResetDevice: () -> Unit
 ) {
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset Device?") },
+            text = { Text("This will revoke existing MQTT credentials. You will need to re-provision the device hardware, but you will remain the owner. Continue?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onResetDevice()
+                        showResetDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -62,26 +92,6 @@ fun SettingsScreen(
                 ) {
                     Text("Logout")
                 }
-            }
-        }
-
-        SectionCard("Connection") {
-            OutlinedTextField(
-                value = uiState.baseUrl,
-                onValueChange = onBaseUrlChanged,
-                label = { Text("MQTT Broker IP/Host") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = uiState.deviceId,
-                onValueChange = onDeviceIdChanged,
-                label = { Text("Device Identifier (Topic)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
-                Text("Save Connection Settings")
             }
         }
 
@@ -186,7 +196,26 @@ fun SettingsScreen(
             }
         }
 
+        // Recovery Section
+        SectionCard("Device Maintenance") {
+            OutlinedButton(
+                onClick = { showResetDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                enabled = uiState.currentDeviceId.isNotBlank()
+            ) {
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.padding(end = 8.dp))
+                Text("Request Device Reset")
+            }
+            Text(
+                "Use this if you need to re-provision the hardware. Ownership will be retained.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         uiState.savedMessage?.let { MessageBanner(it) }
+        uiState.error?.let { MessageBanner(it, isError = true) }
     }
 }
 

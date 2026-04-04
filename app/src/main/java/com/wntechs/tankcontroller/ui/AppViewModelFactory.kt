@@ -16,9 +16,9 @@ class AppViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         @Suppress("UNCHECKED_CAST")
         return when {
-            modelClass.isAssignableFrom(DashboardViewModel::class.java) -> DashboardViewModel(container.deviceRepository) as T
+            modelClass.isAssignableFrom(DashboardViewModel::class.java) -> DashboardViewModel(container.deviceRepository, container.userRepository) as T
             modelClass.isAssignableFrom(ConfigurationViewModel::class.java) -> ConfigurationViewModel(container.deviceRepository) as T
-            modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(container.deviceRepository, tankMeasurementsJson) as T
+            modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(container.deviceRepository, container.userRepository, tankMeasurementsJson) as T
             modelClass.isAssignableFrom(AuthViewModel::class.java) -> AuthViewModel(container.userRepository) as T
             modelClass.isAssignableFrom(PairingViewModel::class.java) -> PairingViewModel(container.userRepository, container.deviceRepository) as T
             else -> error("Unknown ViewModel class: ${modelClass.name}")

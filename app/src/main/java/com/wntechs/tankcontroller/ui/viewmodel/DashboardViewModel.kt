@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.wntechs.tankcontroller.data.model.StatusResponse
 import com.wntechs.tankcontroller.data.repository.DeviceRepository
 import com.wntechs.tankcontroller.data.repository.MqttConnectionState
-import com.wntechs.tankcontroller.util.AppResult
+import com.wntechs.tankcontroller.data.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -14,20 +14,27 @@ import kotlinx.coroutines.launch
 data class DashboardUiState(
     val loading: Boolean = false,
     val connectionState: MqttConnectionState = MqttConnectionState.Disconnected,
+    val deviceId: String = "",
     val baseUrl: String = "",
     val status: StatusResponse = StatusResponse(),
     val message: String? = null,
     val error: String? = null,
 )
 
-class DashboardViewModel(private val repository: DeviceRepository) : ViewModel() {
+class DashboardViewModel(
+    private val repository: DeviceRepository,
+    private val userRepository: UserRepository
+) : ViewModel() {
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             repository.settings.collect { settings ->
-                _uiState.update { it.copy(baseUrl = settings.baseUrl) }
+                _uiState.update { it.copy(
+                    baseUrl = settings.baseUrl,
+                    deviceId = settings.deviceId
+                ) }
             }
         }
 
