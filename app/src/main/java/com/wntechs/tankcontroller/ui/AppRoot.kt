@@ -2,6 +2,7 @@ package com.wntechs.tankcontroller.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -38,6 +39,7 @@ import com.wntechs.tankcontroller.ui.screens.DeviceSelector
 import com.wntechs.tankcontroller.ui.screens.LoginScreen
 import com.wntechs.tankcontroller.ui.screens.RegisterScreen
 import com.wntechs.tankcontroller.ui.screens.SettingsScreen
+import com.wntechs.tankcontroller.ui.screens.SplashScreen
 import com.wntechs.tankcontroller.ui.viewmodel.AuthViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationViewModel
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardViewModel
@@ -59,18 +61,29 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
     val authUiState by authViewModel.uiState.collectAsStateWithLifecycle()
     val pairingUiState by pairingViewModel.uiState.collectAsStateWithLifecycle()
 
-    // Automatic redirection based on Auth state
-    LaunchedEffect(authUiState.isLoggedIn) {
-        if (authUiState.isLoggedIn) {
-            if (currentRoute == NavRoute.Login.route || currentRoute == NavRoute.Register.route || currentRoute == null) {
+    val isAuthScreen = currentRoute == NavRoute.Login.route || 
+                      currentRoute == NavRoute.Register.route || 
+                      currentRoute == NavRoute.Splash.route ||
+                      currentRoute == null
+
+    // Redirection Logic
+    LaunchedEffect(authUiState.isInitializing, authUiState.isLoggedIn, currentRoute) {
+        if (authUiState.isInitializing) return@LaunchedEffect
+
+        val isLoggedIn = authUiState.isLoggedIn
+        val isOnAuthScreen = currentRoute == NavRoute.Login.route || currentRoute == NavRoute.Register.route
+        val isOnSplash = currentRoute == NavRoute.Splash.route || currentRoute == null
+
+        if (isLoggedIn) {
+            if (isOnSplash || isOnAuthScreen) {
                 navController.navigate(NavRoute.Dashboard.route) {
-                    popUpTo(0) { inclusive = true }
+                    popUpTo(NavRoute.Splash.route) { inclusive = true }
                 }
             }
         } else {
-            if (currentRoute != NavRoute.Login.route && currentRoute != NavRoute.Register.route) {
+            if (isOnSplash || !isOnAuthScreen) {
                 navController.navigate(NavRoute.Login.route) {
-                    popUpTo(0) { inclusive = true }
+                    popUpTo(NavRoute.Splash.route) { inclusive = true }
                 }
             }
         }
@@ -79,7 +92,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
     LaunchedEffect(pairingUiState.pairingSuccess) {
         if (pairingUiState.pairingSuccess) {
             navController.navigate(NavRoute.Dashboard.route) {
-                popUpTo(0) { inclusive = true }
+                popUpTo(NavRoute.Discovery.route) { inclusive = true }
             }
         }
     }
@@ -96,40 +109,42 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text(title) },
-                    navigationIcon = {
-                        if (currentRoute == NavRoute.Discovery.route) {
-                            IconButton(onClick = { navController.popBackStack() }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                            }
-                        }
-                    },
-                    windowInsets = TopAppBarDefaults.windowInsets
-                )
-                if (authUiState.isLoggedIn && authUiState.devices.isNotEmpty() && currentRoute != NavRoute.Discovery.route) {
-                    Box(modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .padding(bottom = 8.dp)
-                    ) {
-                        DeviceSelector(
-                            devices = authUiState.devices,
-                            selectedUuid = authUiState.selectedDeviceUuid,
-                            onDeviceSelected = authViewModel::selectDevice,
-                            onAddNewDevice = { 
-                                navController.navigate(NavRoute.Discovery.route) {
-                                    launchSingleTop = true
+            if (!isAuthScreen) {
+                Column {
+                    TopAppBar(
+                        title = { Text(title) },
+                        navigationIcon = {
+                            if (currentRoute == NavRoute.Discovery.route) {
+                                IconButton(onClick = { navController.popBackStack() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                 }
                             }
-                        )
+                        },
+                        windowInsets = TopAppBarDefaults.windowInsets
+                    )
+                    if (authUiState.isLoggedIn && authUiState.devices.isNotEmpty() && currentRoute != NavRoute.Discovery.route) {
+                        Box(modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .padding(bottom = 8.dp)
+                        ) {
+                            DeviceSelector(
+                                devices = authUiState.devices,
+                                selectedUuid = authUiState.selectedDeviceUuid,
+                                onDeviceSelected = authViewModel::selectDevice,
+                                onAddNewDevice = { 
+                                    navController.navigate(NavRoute.Discovery.route) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
         },
         bottomBar = {
-            if (authUiState.isLoggedIn) {
+            if (authUiState.isLoggedIn && !isAuthScreen) {
                 NavigationBar {
                     val items = listOf(
                         NavRoute.Dashboard to ("Home" to Icons.Default.Home),
@@ -140,10 +155,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                         NavigationBarItem(
                             selected = currentRoute == route.route,
                             onClick = {
-                                if (route.route == NavRoute.Dashboard.route) {
-                                    // Robust fix: pop explicitly back to dashboard to clear discovery
-                                    navController.popBackStack(NavRoute.Dashboard.route, inclusive = false)
-                                } else {
+                                if (currentRoute != route.route) {
                                     navController.navigate(route.route) {
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true
@@ -151,6 +163,8 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                                         launchSingleTop = true
                                         restoreState = true
                                     }
+                                } else if (route.route == NavRoute.Dashboard.route) {
+                                    navController.popBackStack(NavRoute.Dashboard.route, inclusive = false)
                                 }
                             },
                             icon = { Icon(meta.second, null) },
@@ -160,12 +174,15 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 }
             }
         }
-    ) { padding ->
+    ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = if (authUiState.isLoggedIn) NavRoute.Dashboard.route else NavRoute.Login.route,
-            modifier = Modifier.padding(padding),
+            startDestination = NavRoute.Splash.route,
+            modifier = Modifier.fillMaxSize(),
         ) {
+            composable(NavRoute.Splash.route) {
+                SplashScreen()
+            }
             composable(NavRoute.Login.route) {
                 LoginScreen(uiState = authUiState, onLogin = authViewModel::login, onNavigateToRegister = { navController.navigate(NavRoute.Register.route) })
             }
@@ -173,30 +190,38 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 RegisterScreen(uiState = authUiState, onRegister = authViewModel::register, onNavigateToLogin = { navController.navigate(NavRoute.Login.route) })
             }
             composable(NavRoute.Discovery.route) {
-                DeviceDiscoveryScreen(uiState = pairingUiState, onStartPairing = pairingViewModel::startPairing)
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    DeviceDiscoveryScreen(uiState = pairingUiState, onStartPairing = pairingViewModel::startPairing)
+                }
             }
             composable(NavRoute.Dashboard.route) {
                 val ui by dashboardViewModel.uiState.collectAsStateWithLifecycle()
-                DashboardScreen(
-                    uiState = ui,
-                    onTurnOn = { dashboardViewModel.turnManual(true) },
-                    onTurnOff = { dashboardViewModel.turnManual(false) },
-                    onReturnAuto = dashboardViewModel::returnAuto,
-                    onOpenConfig = { navController.navigate(NavRoute.Config.route) },
-                    onNavigateToDiscovery = { 
-                        navController.navigate(NavRoute.Discovery.route) {
-                            launchSingleTop = true
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    DashboardScreen(
+                        uiState = ui,
+                        onTurnOn = { dashboardViewModel.turnManual(true) },
+                        onTurnOff = { dashboardViewModel.turnManual(false) },
+                        onReturnAuto = dashboardViewModel::returnAuto,
+                        onOpenConfig = { navController.navigate(NavRoute.Config.route) },
+                        onNavigateToDiscovery = { 
+                            navController.navigate(NavRoute.Discovery.route) {
+                                launchSingleTop = true
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
             composable(NavRoute.Config.route) {
                 val ui by configurationViewModel.uiState.collectAsStateWithLifecycle()
-                ConfigurationScreen(uiState = ui, onUpdateField = configurationViewModel::updateField, onSave = configurationViewModel::save)
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    ConfigurationScreen(uiState = ui, onUpdateField = configurationViewModel::updateField, onSave = configurationViewModel::save)
+                }
             }
             composable(NavRoute.Settings.route) {
                 val ui by settingsViewModel.uiState.collectAsStateWithLifecycle()
-                SettingsScreen(uiState = ui, authUiState = authUiState, onBaseUrlChanged = settingsViewModel::updateBaseUrl, onDeviceIdChanged = settingsViewModel::updateDeviceId, onFamilySelected = settingsViewModel::selectFamily, onModelSelected = settingsViewModel::selectModel, onApplyPreset = settingsViewModel::applySelectedPreset, onSave = settingsViewModel::save, onLogout = authViewModel::logout)
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    SettingsScreen(uiState = ui, authUiState = authUiState, onBaseUrlChanged = settingsViewModel::updateBaseUrl, onDeviceIdChanged = settingsViewModel::updateDeviceId, onFamilySelected = settingsViewModel::selectFamily, onModelSelected = settingsViewModel::selectModel, onApplyPreset = settingsViewModel::applySelectedPreset, onSave = settingsViewModel::save, onLogout = authViewModel::logout)
+                }
             }
         }
     }

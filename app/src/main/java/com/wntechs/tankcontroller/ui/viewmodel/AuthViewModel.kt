@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 
 data class AuthUiState(
     val isLoading: Boolean = false,
+    val isInitializing: Boolean = true,
     val error: String? = null,
     val isLoggedIn: Boolean = false,
     val name: String? = null,
@@ -36,7 +37,8 @@ class AuthViewModel(
                 _uiState.update { it.copy(
                     isLoggedIn = state.isLoggedIn,
                     name = state.name,
-                    email = state.email
+                    email = state.email,
+                    isInitializing = false
                 ) }
                 if (state.isLoggedIn) {
                     refreshDevices()
@@ -49,13 +51,11 @@ class AuthViewModel(
                 _uiState.update { it.copy(devices = list) }
             }
         }
-
-        // Add observation for the selected device ID
+        
         viewModelScope.launch {
-            // We can observe the settings flow through a new helper in UserRepository or directly if we had access to settingsStore
-            // Since we want to keep it in sync with what's actually saved
-            // UserRepository doesn't expose settingsFlow directly, but DeviceRepository does.
-            // Let's assume we can get it from settingsStore via userRepository for now or add a flow to UserRepository.
+            userRepository.selectedDeviceId.collect { uuid ->
+                _uiState.update { it.copy(selectedDeviceUuid = uuid) }
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.wntechs.tankcontroller.ui
 
 sealed class NavRoute(val route: String) {
+    data object Splash : NavRoute("splash")
     data object Login : NavRoute("login")
     data object Register : NavRoute("register")
     data object Dashboard : NavRoute("dashboard")

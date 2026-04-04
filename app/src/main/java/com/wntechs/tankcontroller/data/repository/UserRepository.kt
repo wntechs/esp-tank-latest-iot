@@ -14,6 +14,7 @@ import com.wntechs.tankcontroller.data.model.RegisterRequest
 import com.wntechs.tankcontroller.data.model.ValidationErrorResponse
 import com.wntechs.tankcontroller.data.remote.AuthApi
 import com.wntechs.tankcontroller.util.AppResult
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import retrofit2.Response
@@ -65,6 +66,13 @@ class UserRepository(
             if (response.isSuccessful) {
                 val devices = response.body()?.data ?: emptyList()
                 settingsStore.saveDeviceList(devices)
+                
+                // Auto-select first device if none is currently selected
+                val currentSelected = settingsStore.settingsFlow.first().deviceId
+                if (currentSelected.isBlank() && devices.isNotEmpty()) {
+                    selectDevice(devices[0].uuid)
+                }
+                
                 AppResult.Success(devices)
             } else {
                 AppResult.Error(parseError(response))

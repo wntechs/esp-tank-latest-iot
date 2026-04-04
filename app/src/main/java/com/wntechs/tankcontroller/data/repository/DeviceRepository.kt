@@ -1,6 +1,7 @@
 package com.wntechs.tankcontroller.data.repository
 
 import android.os.Build
+import android.util.Log
 import com.wntechs.tankcontroller.data.discovery.MqttManager
 import com.wntechs.tankcontroller.data.local.SettingsStore
 import com.wntechs.tankcontroller.data.model.ConfigUpdateRequest
@@ -11,7 +12,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -29,21 +33,32 @@ class DeviceRepository(
     val authState = userRepository.authState
 
     init {
+        // Monitor both device selection and MQTT credentials
         CoroutineScope(Dispatchers.IO).launch {
-            settings.collect {
-                currentDeviceUuid = it.deviceId
-            }
-        }
-        
-        // Monitor saved credentials and auto-connect if available
-        CoroutineScope(Dispatchers.IO).launch {
-            settingsStore.mqttCredsFlow.collect { creds ->
-                if (creds != null && currentDeviceUuid.isNotBlank()) {
-                    mqttManager.connect(creds, currentDeviceUuid)
-                    _connectionState.value = MqttConnectionState.Connected
-                } else {
+            combine(
+                settings.map { it.deviceId }.distinctUntilChanged(),
+                settingsStore.mqttCredsFlow.distinctUntilChanged(),
+                authState.map { it.isLoggedIn }.distinctUntilChanged()
+            ) { deviceId: String, creds: MqttCredentials?, isLoggedIn: Boolean ->
+                Triple(deviceId, creds, isLoggedIn)
+            }.collect { (deviceId, creds, isLoggedIn) ->
+                currentDeviceUuid = deviceId
+                
+                if (!isLoggedIn || deviceId.isBlank()) {
                     mqttManager.disconnect()
                     _connectionState.value = MqttConnectionState.Disconnected
+                    return@collect
+                }
+
+                if (creds != null) {
+                    // We have credentials, connect!
+                    mqttManager.connect(creds, deviceId)
+                    _connectionState.value = MqttConnectionState.Connected
+                } else {
+                    // We have a device but NO credentials (likely after a fresh login)
+                    // Automatically trigger the credential fetch
+                    Log.d("DeviceRepository", "Device selected but no MQTT creds found. Fetching...")
+                    connectWithDynamicCredentials()
                 }
             }
         }
@@ -70,7 +85,7 @@ class DeviceRepository(
         
         return when (val result = userRepository.getMqttCredentials(deviceUuid, deviceName)) {
             is AppResult.Success -> {
-                // SettingsStore.mqttCredsFlow will trigger the connection in init block
+                // SettingsStore.mqttCredsFlow will trigger the connection in the init block's combine observer
                 AppResult.Success(Unit)
             }
             is AppResult.Error -> {
@@ -95,18 +110,24 @@ class DeviceRepository(
     }
 
     fun requestUpdate() {
+        if (currentDeviceUuid.isBlank()) return
         mqttManager.publish(getPublishTopic("get_status"))
         mqttManager.publish(getPublishTopic("get_config"))
     }
 
     fun setManual(turnOn: Boolean) {
+        if (currentDeviceUuid.isBlank()) return
         val cmd = if (turnOn) "ON" else "OFF"
         mqttManager.publish(getPublishTopic("manual"), cmd)
     }
 
-    fun setAuto() = mqttManager.publish(getPublishTopic("auto"))
+    fun setAuto() {
+        if (currentDeviceUuid.isBlank()) return
+        mqttManager.publish(getPublishTopic("auto"))
+    }
 
     fun updateConfig(request: ConfigUpdateRequest) {
+        if (currentDeviceUuid.isBlank()) return
         val payload = Json.encodeToString(request)
         mqttManager.publish(getPublishTopic("config"), payload)
     }
