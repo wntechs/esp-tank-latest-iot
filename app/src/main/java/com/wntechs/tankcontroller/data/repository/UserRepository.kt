@@ -27,6 +27,7 @@ class UserRepository(
     val mqttCreds = settingsStore.mqttCredsFlow
     val deviceList = settingsStore.deviceListFlow
     val selectedDeviceId = settingsStore.settingsFlow.map { it.deviceId }
+    val appDeviceKey = settingsStore.appDeviceKeyFlow
 
     suspend fun register(request: RegisterRequest): AppResult<Unit> {
         return try {
@@ -138,9 +139,9 @@ class UserRepository(
         }
     }
 
-    suspend fun getMqttCredentials(deviceUuid: String, deviceName: String): AppResult<MqttCredentials> {
+    suspend fun getMqttCredentials(deviceUuid: String, deviceName: String, appDeviceKey: String): AppResult<MqttCredentials> {
         return try {
-            val response = authApi.getMqttCredentials(MqttCredentialsRequest(deviceUuid, deviceName))
+            val response = authApi.getMqttCredentials(MqttCredentialsRequest(deviceUuid, deviceName, appDeviceKey))
             if (response.isSuccessful) {
                 val creds = response.body()?.data?.mqtt ?: return AppResult.Error("Empty response body")
                 settingsStore.saveMqttCreds(creds)
@@ -153,9 +154,9 @@ class UserRepository(
         }
     }
 
-    suspend fun refreshMqttCredentials(deviceUuid: String, clientId: String): AppResult<MqttCredentials> {
+    suspend fun refreshMqttCredentials(deviceUuid: String, appDeviceKey: String): AppResult<MqttCredentials> {
         return try {
-            val response = authApi.refreshMqttCredentials(MqttRefreshRequest(deviceUuid, clientId))
+            val response = authApi.refreshMqttCredentials(MqttRefreshRequest(deviceUuid, appDeviceKey))
             if (response.isSuccessful) {
                 val creds = response.body()?.data?.mqtt ?: return AppResult.Error("Empty response body")
                 settingsStore.saveMqttCreds(creds)

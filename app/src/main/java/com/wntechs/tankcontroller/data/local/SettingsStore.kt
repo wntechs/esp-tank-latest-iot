@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore(name = "water_tank_settings")
 
@@ -21,6 +22,7 @@ class SettingsStore(private val context: Context) {
         val userEmail = stringPreferencesKey("user_email")
         val mqttCreds = stringPreferencesKey("mqtt_creds")
         val deviceList = stringPreferencesKey("device_list")
+        val appDeviceKey = stringPreferencesKey("app_device_key")
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -52,6 +54,14 @@ class SettingsStore(private val context: Context) {
         } ?: emptyList()
     }
 
+    val appDeviceKeyFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.appDeviceKey] ?: run {
+            val newKey = UUID.randomUUID().toString()
+            saveAppDeviceKey(newKey)
+            newKey
+        }
+    }
+
     suspend fun saveBaseUrl(url: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.baseUrl] = url
@@ -81,6 +91,12 @@ class SettingsStore(private val context: Context) {
     suspend fun saveDeviceList(devices: List<OwnedDevice>) {
         context.dataStore.edit { prefs ->
             prefs[Keys.deviceList] = json.encodeToString(devices)
+        }
+    }
+
+    private suspend fun saveAppDeviceKey(key: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.appDeviceKey] = key
         }
     }
 

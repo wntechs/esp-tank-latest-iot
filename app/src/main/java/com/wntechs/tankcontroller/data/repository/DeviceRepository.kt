@@ -33,15 +33,14 @@ class DeviceRepository(
     val authState = userRepository.authState
 
     init {
-        // Monitor both device selection and MQTT credentials
+        // Monitor both device selection and user session
         CoroutineScope(Dispatchers.IO).launch {
             combine(
                 settings.map { it.deviceId }.distinctUntilChanged(),
-                settingsStore.mqttCredsFlow.distinctUntilChanged(),
                 authState.map { it.isLoggedIn }.distinctUntilChanged()
-            ) { deviceId: String, creds: MqttCredentials?, isLoggedIn: Boolean ->
-                Triple(deviceId, creds, isLoggedIn)
-            }.collect { (deviceId, creds, isLoggedIn) ->
+            ) { deviceId: String, isLoggedIn: Boolean ->
+                Pair(deviceId, isLoggedIn)
+            }.collect { (deviceId, isLoggedIn) ->
                 currentDeviceUuid = deviceId
                 
                 if (!isLoggedIn || deviceId.isBlank()) {
@@ -50,16 +49,8 @@ class DeviceRepository(
                     return@collect
                 }
 
-                if (creds != null) {
-                    // We have credentials, connect!
-                    mqttManager.connect(creds, deviceId)
-                    _connectionState.value = MqttConnectionState.Connected
-                } else {
-                    // We have a device but NO credentials (likely after a fresh login)
-                    // Automatically trigger the credential fetch
-                    Log.d("DeviceRepository", "Device selected but no MQTT creds found. Fetching...")
-                    connectWithDynamicCredentials()
-                }
+                // Optimization: Try to connect using whatever we have first
+                connectWithDynamicCredentials()
             }
         }
     }
@@ -70,37 +61,67 @@ class DeviceRepository(
     val isOnline = mqttManager.isDeviceOnline
 
     suspend fun connectWithDynamicCredentials(): AppResult<Unit> {
-        // Ensure user is logged in
         val auth = authState.first()
-        if (!auth.isLoggedIn) {
-            return AppResult.Error("User is not logged in")
-        }
+        if (!auth.isLoggedIn) return AppResult.Error("User is not logged in")
 
         val deviceUuid = settings.first().deviceId
         if (deviceUuid.isBlank()) return AppResult.Error("Device UUID is missing")
         
         val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}"
+        val appKey = settingsStore.appDeviceKeyFlow.first()
         
         _connectionState.value = MqttConnectionState.Connecting
-        
-        return when (val result = userRepository.getMqttCredentials(deviceUuid, deviceName)) {
+
+        // 1. Try connecting with stored credentials first
+        val existingCreds = settingsStore.mqttCredsFlow.first()
+        if (existingCreds != null) {
+            Log.d("DeviceRepository", "Found stored MQTT creds. Attempting direct connection...")
+            if (mqttManager.connect(existingCreds, deviceUuid)) {
+                _connectionState.value = MqttConnectionState.Connected
+                return AppResult.Success(Unit)
+            }
+            Log.d("DeviceRepository", "Stored credentials failed (likely expired).")
+        }
+
+        // 2. Direct connection failed or no creds found -> Try REFRESH
+        Log.d("DeviceRepository", "Attempting MQTT credential refresh...")
+        val refreshResult = userRepository.refreshMqttCredentials(deviceUuid, appKey)
+        if (refreshResult is AppResult.Success) {
+            if (mqttManager.connect(refreshResult.data, deviceUuid)) {
+                _connectionState.value = MqttConnectionState.Connected
+                return AppResult.Success(Unit)
+            }
+        }
+
+        // 3. Refresh failed -> Call ISSUE (Full rotation)
+        Log.d("DeviceRepository", "Refresh failed. Issuing fresh MQTT credentials...")
+        return when (val issueResult = userRepository.getMqttCredentials(deviceUuid, deviceName, appKey)) {
             is AppResult.Success -> {
-                // SettingsStore.mqttCredsFlow will trigger the connection in the init block's combine observer
-                AppResult.Success(Unit)
+                if (mqttManager.connect(issueResult.data, deviceUuid)) {
+                    _connectionState.value = MqttConnectionState.Connected
+                    AppResult.Success(Unit)
+                } else {
+                    val msg = "MQTT connection failed even with fresh credentials"
+                    _connectionState.value = MqttConnectionState.Error(msg)
+                    AppResult.Error(msg)
+                }
             }
             is AppResult.Error -> {
-                _connectionState.value = MqttConnectionState.Error(result.message)
-                AppResult.Error(result.message)
+                _connectionState.value = MqttConnectionState.Error(issueResult.message)
+                AppResult.Error(issueResult.message)
             }
         }
     }
 
     suspend fun refreshCredentials(): AppResult<Unit> {
-        val creds = settingsStore.mqttCredsFlow.first() ?: return AppResult.Error("No existing credentials")
         val deviceUuid = settings.first().deviceId
+        val appKey = settingsStore.appDeviceKeyFlow.first()
         
-        return when (val result = userRepository.refreshMqttCredentials(deviceUuid, creds.clientId)) {
-            is AppResult.Success -> AppResult.Success(Unit)
+        return when (val result = userRepository.refreshMqttCredentials(deviceUuid, appKey)) {
+            is AppResult.Success -> {
+                mqttManager.connect(result.data, deviceUuid)
+                AppResult.Success(Unit)
+            }
             is AppResult.Error -> AppResult.Error(result.message)
         }
     }

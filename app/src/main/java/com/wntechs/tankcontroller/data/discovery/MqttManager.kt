@@ -8,8 +8,14 @@ import com.wntechs.tankcontroller.data.model.MqttCredentials
 import com.wntechs.tankcontroller.data.model.StatusResponse
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 class MqttManager {
     private var client: Mqtt3AsyncClient? = null
@@ -31,52 +37,95 @@ class MqttManager {
         MutableSharedFlow<Boolean>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val isDeviceOnline = _availabilityFlow.asSharedFlow()
 
-    fun connect(creds: MqttCredentials, deviceUuid: String) {
-        Log.d("MqttManager", "Connecting to ${creds.host}:${creds.port} with TLS")
-        Log.d("MqttManager", "Step 1: connect() called for $deviceUuid at ${creds.host}")
-        if (client != null) {
-            Log.d("MqttManager", "Existing client found, disconnecting...")
-            disconnect()
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected = _isConnected.asStateFlow()
+
+    suspend fun connect(creds: MqttCredentials, deviceUuid: String): Boolean {
+        Log.d("MqttManager", "Attempting to connect to ${creds.host}:${creds.port}...")
+        
+        // Use a coroutine-level timeout to ensure we don't hang forever
+        val result = withTimeoutOrNull(20000) { 
+            performConnect(creds, deviceUuid)
+        }
+        
+        if (result == null) {
+            Log.e("MqttManager", "Connection to ${creds.host} timed out after 20s")
+            _isConnected.value = false
+            return false
+        }
+        
+        return result
+    }
+
+    private suspend fun performConnect(creds: MqttCredentials, deviceUuid: String): Boolean = suspendCancellableCoroutine { continuation ->
+        try {
+            // Disconnect any existing client before creating a new one
+            client?.disconnect()
+            client = null
+
+            val builder = MqttClient.builder()
+                .useMqttVersion3()
+                .identifier(creds.clientId)
+                .serverHost(creds.host)
+                .serverPort(creds.port)
+                .transportConfig()
+                    .mqttConnectTimeout(15, TimeUnit.SECONDS)
+                    .applyTransportConfig()
+                .automaticReconnectWithDefaultConfig()
+                .simpleAuth()
+                    .username(creds.username)
+                    .password(creds.password.toByteArray())
+                    .applySimpleAuth()
+
+            // Enable SSL/TLS for port 8883 (standard MQTTS port)
+            if (creds.port == 8883 || creds.port == 443) {
+                Log.d("MqttManager", "Enabling SSL for port ${creds.port}")
+                builder.sslWithDefaultConfig()
+            }
+
+            val newClient = builder.buildAsync()
+            client = newClient
+
+            Log.d("MqttManager", "Sending connect request for client ${creds.clientId}...")
+            newClient.connectWith()
+                .cleanSession(true)
+                .keepAlive(30)
+                .send()
+                .whenComplete { ack, throwable ->
+                    if (throwable == null) {
+                        Log.d("MqttManager", "Connected successfully to ${creds.host}. Ack: $ack")
+                        _isConnected.value = true
+                        subscribeToTopics(creds, deviceUuid)
+                        if (continuation.isActive) continuation.resume(true)
+                    } else {
+                        Log.e("MqttManager", "Connection to ${creds.host} failed: ${throwable.message}")
+                        _isConnected.value = false
+                        _errorFlow.tryEmit("MQTT Connection failed: ${throwable.message}")
+                        if (continuation.isActive) continuation.resume(false)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("MqttManager", "Error during MQTT setup: ${e.message}")
+            _isConnected.value = false
+            if (continuation.isActive) continuation.resume(false)
         }
 
-        client = MqttClient.builder()
-            .useMqttVersion3()
-            .identifier(creds.clientId)
-            .serverHost(creds.host)
-            .serverPort(creds.port)
-            .sslWithDefaultConfig()
-            .automaticReconnectWithDefaultConfig()
-            .simpleAuth()
-            .username(creds.username)
-            .password(creds.password.toByteArray())
-            .applySimpleAuth()
-            .buildAsync()
-
-        Log.d("MqttManager", "Step 2: Sending connection request...")
-        client?.connectWith()?.send()?.whenComplete { _, throwable ->
-            if (throwable == null) {
-                Log.d("MqttManager", "Step 3: Connection SUCCESS. Proceeding to subscribe...")
-                subscribeToTopics(creds, deviceUuid)
-            } else {
-                Log.e("MqttManager", "Step 3: Connection FAILED: ${throwable.message}")
-                _errorFlow.tryEmit("MQTT Connection failed: ${throwable.message}")
-            }
+        continuation.invokeOnCancellation {
+            Log.d("MqttManager", "Connect task cancelled.")
+            client?.disconnect()
+            client = null
         }
     }
 
     private fun subscribeToTopics(creds: MqttCredentials, deviceUuid: String) {
-        val c = client ?: run {
-            Log.e("MqttManager", "Subscribe aborted: Client is null")
-            return
-        }
-
-        Log.d("MqttManager", "Step 4: Initiating Subscriptions. Topic count: ${creds.topics.subscribe.size}")
+        val c = client ?: return
+        Log.d("MqttManager", "Setting up subscriptions for $deviceUuid...")
+        
         creds.topics.subscribe.forEach { topicFilter ->
             val cleanTopic = topicFilter.replace("{uuid}", deviceUuid)
-            Log.d("MqttManager", "Attempting to subscribe to: $cleanTopic")
+            Log.d("MqttManager", "Subscribing to: $cleanTopic")
             c.subscribeWith().topicFilter(cleanTopic).callback { p ->
                 val payload = p.payloadAsBytes.decodeToString()
-                Log.v("MqttManager", "Incoming message on [$cleanTopic]: $payload")
                 try {
                     when {
                         cleanTopic.contains("/telemetry") || cleanTopic.contains("/state") -> {
@@ -96,19 +145,23 @@ class MqttManager {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("MqttManager", "Error parsing MQTT payload: ${e.message}")
+                    Log.e("MqttManager", "Parse error on $cleanTopic: ${e.message}")
                 }
-            }.send().whenComplete { _, throwable ->
-                if (throwable != null) {
-                    Log.e("MqttManager", "Failed to subscribe to $cleanTopic: ${throwable.message}")
+            }.send().whenComplete { subAck, subError ->
+                if (subError != null) {
+                    Log.e("MqttManager", "Subscription failed for $cleanTopic: ${subError.message}")
                 } else {
-                    Log.d("MqttManager", "Successfully subscribed to $cleanTopic")
+                    Log.d("MqttManager", "Subscribed to $cleanTopic. Ack: $subAck")
                 }
             }
         }
     }
 
     fun publish(topic: String, payload: String = "") {
+        if (!_isConnected.value) {
+            Log.w("MqttManager", "Skipping publish to $topic - not connected")
+            return
+        }
         client?.publishWith()
             ?.topic(topic)
             ?.payload(payload.toByteArray())
@@ -116,7 +169,9 @@ class MqttManager {
     }
 
     fun disconnect() {
+        Log.d("MqttManager", "Disconnecting MQTT...")
         client?.disconnect()
         client = null
+        _isConnected.value = false
     }
 }

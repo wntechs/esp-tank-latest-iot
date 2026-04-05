@@ -68,8 +68,8 @@ class DashboardViewModel(
             }
         }
 
-        // Attempt to connect using dynamic credentials on start
-        connect()
+        // Note: Repository now automatically manages connection based on login state and device selection.
+        // No need to call connect() manually here on init.
     }
 
     fun connect() {

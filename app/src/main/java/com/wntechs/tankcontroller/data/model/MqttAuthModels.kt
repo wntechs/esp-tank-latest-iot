@@ -7,13 +7,15 @@ import kotlinx.serialization.Serializable
 data class MqttCredentialsRequest(
     @SerialName("device_uuid") val deviceUuid: String,
     @SerialName("device_name") val deviceName: String,
+    @SerialName("app_device_key") val appDeviceKey: String,
     @SerialName("client_id") val clientId: String? = null
 )
 
 @Serializable
 data class MqttRefreshRequest(
     @SerialName("device_uuid") val deviceUuid: String,
-    @SerialName("client_id") val clientId: String
+    @SerialName("app_device_key") val appDeviceKey: String? = null,
+    @SerialName("client_id") val clientId: String? = null
 )
 
 @Serializable
