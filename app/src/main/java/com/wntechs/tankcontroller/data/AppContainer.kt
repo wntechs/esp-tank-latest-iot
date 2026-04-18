@@ -1,6 +1,7 @@
 package com.wntechs.tankcontroller.data
 
 import android.content.Context
+import com.wntechs.tankcontroller.data.ble.BleManager
 import com.wntechs.tankcontroller.data.discovery.MqttManager
 import com.wntechs.tankcontroller.data.local.SettingsStore
 import com.wntechs.tankcontroller.data.remote.ApiClientFactory
@@ -14,6 +15,7 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
     val settingsStore = SettingsStore(appContext)
     val mqttManager = MqttManager()
+    val bleManager = BleManager(appContext)
     val apiClientFactory = ApiClientFactory(settingsStore)
 
     private val userSettingsFlow = settingsStore.settingsFlow.map { settings ->
@@ -23,7 +25,7 @@ class AppContainer(context: Context) {
                 .replace("http://", "")
                 .replace("https://", "")
                 .split(":")[0],
-            deviceId = settings.deviceId // Removed .ifBlank { "relay1" }
+            deviceId = settings.deviceId
         )
     }
 

@@ -65,22 +65,19 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                       currentRoute == NavRoute.Register.route || 
                       currentRoute == NavRoute.Splash.route
 
-    // Redirection Logic
+    // Handle Startup and Auth Redirection
     LaunchedEffect(authUiState.isInitializing, authUiState.isLoggedIn, currentRoute) {
         if (authUiState.isInitializing) return@LaunchedEffect
 
-        val isLoggedIn = authUiState.isLoggedIn
-        val isOnAuthScreen = currentRoute == NavRoute.Login.route || currentRoute == NavRoute.Register.route
-        val isOnSplash = currentRoute == NavRoute.Splash.route || currentRoute == null
-
-        if (isLoggedIn) {
-            if (isOnSplash || isOnAuthScreen) {
+        if (authUiState.isLoggedIn) {
+            if (currentRoute == NavRoute.Splash.route || currentRoute == NavRoute.Login.route || 
+                currentRoute == NavRoute.Register.route) {
                 navController.navigate(NavRoute.Dashboard.route) {
                     popUpTo(NavRoute.Splash.route) { inclusive = true }
                 }
             }
         } else {
-            if (isOnSplash || !isOnAuthScreen) {
+            if (currentRoute != NavRoute.Login.route && currentRoute != NavRoute.Register.route) {
                 navController.navigate(NavRoute.Login.route) {
                     popUpTo(NavRoute.Splash.route) { inclusive = true }
                 }
@@ -177,7 +174,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
         NavHost(
             navController = navController,
             startDestination = NavRoute.Splash.route,
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            modifier = Modifier.fillMaxSize(),
         ) {
             composable(NavRoute.Splash.route) {
                 SplashScreen()
@@ -189,38 +186,54 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 RegisterScreen(uiState = authUiState, onRegister = authViewModel::register, onNavigateToLogin = { navController.navigate(NavRoute.Login.route) })
             }
             composable(NavRoute.Discovery.route) {
-                DeviceDiscoveryScreen(uiState = pairingUiState, onStartPairing = pairingViewModel::startPairing)
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    DeviceDiscoveryScreen(
+                        uiState = pairingUiState,
+                        onStartPairing = pairingViewModel::startPairing,
+                        onDiscoveryModeChanged = pairingViewModel::setDiscoveryMode,
+                        onScanBleDevices = pairingViewModel::startBleScan,
+                        onConnectBleDevice = pairingViewModel::connectBleDevice,
+                        onScanWifi = pairingViewModel::scanWifi,
+                        onProvisionWifi = pairingViewModel::provisionWifi
+                    )
+                }
             }
             composable(NavRoute.Dashboard.route) {
                 val ui by dashboardViewModel.uiState.collectAsStateWithLifecycle()
-                DashboardScreen(
-                    uiState = ui,
-                    onTurnOn = { dashboardViewModel.turnManual(true) },
-                    onTurnOff = { dashboardViewModel.turnManual(false) },
-                    onReturnAuto = dashboardViewModel::returnAuto,
-                    onOpenConfig = { navController.navigate(NavRoute.Config.route) },
-                    onNavigateToDiscovery = { 
-                        navController.navigate(NavRoute.Discovery.route) {
-                            launchSingleTop = true
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    DashboardScreen(
+                        uiState = ui,
+                        onTurnOn = { dashboardViewModel.turnManual(true) },
+                        onTurnOff = { dashboardViewModel.turnManual(false) },
+                        onReturnAuto = dashboardViewModel::returnAuto,
+                        onOpenConfig = { navController.navigate(NavRoute.Config.route) },
+                        onNavigateToDiscovery = { 
+                            navController.navigate(NavRoute.Discovery.route) {
+                                launchSingleTop = true
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
             composable(NavRoute.Config.route) {
                 val ui by configurationViewModel.uiState.collectAsStateWithLifecycle()
-                ConfigurationScreen(uiState = ui, onUpdateField = configurationViewModel::updateField, onSave = configurationViewModel::save)
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    ConfigurationScreen(uiState = ui, onUpdateField = configurationViewModel::updateField, onSave = configurationViewModel::save)
+                }
             }
             composable(NavRoute.Settings.route) {
                 val ui by settingsViewModel.uiState.collectAsStateWithLifecycle()
-                SettingsScreen(
-                    uiState = ui,
-                    authUiState = authUiState,
-                    onFamilySelected = settingsViewModel::selectFamily,
-                    onModelSelected = settingsViewModel::selectModel,
-                    onApplyPreset = settingsViewModel::applySelectedPreset,
-                    onLogout = authViewModel::logout,
-                    onResetDevice = settingsViewModel::resetDevice
-                )
+                Box(modifier = Modifier.padding(innerPadding)) {
+                    SettingsScreen(
+                        uiState = ui,
+                        authUiState = authUiState,
+                        onFamilySelected = settingsViewModel::selectFamily,
+                        onModelSelected = settingsViewModel::selectModel,
+                        onApplyPreset = settingsViewModel::applySelectedPreset,
+                        onLogout = authViewModel::logout,
+                        onResetDevice = settingsViewModel::resetDevice
+                    )
+                }
             }
         }
     }

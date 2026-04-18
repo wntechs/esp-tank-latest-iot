@@ -20,7 +20,7 @@ class AppViewModelFactory(
             modelClass.isAssignableFrom(ConfigurationViewModel::class.java) -> ConfigurationViewModel(container.deviceRepository) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(container.deviceRepository, container.userRepository, tankMeasurementsJson) as T
             modelClass.isAssignableFrom(AuthViewModel::class.java) -> AuthViewModel(container.userRepository) as T
-            modelClass.isAssignableFrom(PairingViewModel::class.java) -> PairingViewModel(container.userRepository, container.deviceRepository) as T
+            modelClass.isAssignableFrom(PairingViewModel::class.java) -> PairingViewModel(container.userRepository, container.deviceRepository, container.bleManager) as T
             else -> error("Unknown ViewModel class: ${modelClass.name}")
         }
     }
