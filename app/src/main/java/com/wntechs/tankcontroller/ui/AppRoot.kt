@@ -238,7 +238,10 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                         onModelSelected = settingsViewModel::selectModel,
                         onApplyPreset = settingsViewModel::applySelectedPreset,
                         onLogout = authViewModel::logout,
-                        onResetDevice = settingsViewModel::resetDevice
+                        onResetDevice = settingsViewModel::resetDevice,
+                        onRefreshSensors = settingsViewModel::fetchSensors,
+                        onSelectSensor = settingsViewModel::onSelectSensor,
+                        onUnselectSensor = settingsViewModel::onUnselectSensor
                     )
                 }
             }

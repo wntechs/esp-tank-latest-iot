@@ -59,6 +59,8 @@ class DeviceRepository(
     val config = mqttManager.configFlow
     val errors = mqttManager.errorFlow
     val isOnline = mqttManager.isDeviceOnline
+    // Add this line to expose the sensor list from MqttManager
+    val sensorListFlow = mqttManager.sensorListFlow
 
     suspend fun connectWithDynamicCredentials(): AppResult<Unit> {
         val auth = authState.first()
@@ -151,6 +153,21 @@ class DeviceRepository(
     fun setAuto() {
         if (currentDeviceUuid.isBlank()) return
         mqttManager.publish(getPublishTopic("auto"))
+    }
+
+    fun getSensors() {
+        if (currentDeviceUuid.isBlank()) return
+        mqttManager.publish(getPublishTopic("pairing/list"))
+    }
+
+    fun selectSensor(index: Int) {
+        if (currentDeviceUuid.isBlank()) return
+        mqttManager.publish(getPublishTopic("pairing/select"), index.toString())
+    }
+
+    fun unSelectSensor() {
+        if (currentDeviceUuid.isBlank()) return
+        mqttManager.publish(getPublishTopic("pairing/unselect"))
     }
 
     fun updateConfig(request: ConfigUpdateRequest) {

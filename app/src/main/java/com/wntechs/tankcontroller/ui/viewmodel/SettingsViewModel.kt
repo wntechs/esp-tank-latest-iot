@@ -1,7 +1,9 @@
 package com.wntechs.tankcontroller.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wntechs.tankcontroller.data.model.SensorItem
 import com.wntechs.tankcontroller.data.model.TankFamily
 import com.wntechs.tankcontroller.data.model.TankMeasurements
 import com.wntechs.tankcontroller.data.model.TankModel
@@ -22,7 +24,10 @@ data class SettingsUiState(
     val tankMeasurements: TankMeasurements? = null,
     val selectedFamily: TankFamily? = null,
     val selectedModel: TankModel? = null,
-    val currentDeviceId: String = ""
+    val currentDeviceId: String = "",
+    val sensorList: List<SensorItem> = emptyList(),
+    val pairedSensorId: String = "",
+    val isFetchingSensors: Boolean = false
 )
 
 class SettingsViewModel(
@@ -42,7 +47,16 @@ class SettingsViewModel(
             null
         }
         _uiState.update { it.copy(tankMeasurements = measurements) }
-
+        viewModelScope.launch {
+            repository.sensorListFlow.collect { response ->
+                Log.d("SettingsViewModel", "Received sensor list update: ${response.sensors.size} sensors")
+                _uiState.update { it.copy(
+                    sensorList = response.sensors,
+                    pairedSensorId = response.paired_sensor_id,
+                    isFetchingSensors = false
+                ) }
+            }
+        }
         viewModelScope.launch {
             repository.settings.collect { settings ->
                 _uiState.update { it.copy(currentDeviceId = settings.deviceId) }
@@ -50,6 +64,19 @@ class SettingsViewModel(
         }
     }
 
+    fun fetchSensors() {
+        _uiState.update { it.copy(isFetchingSensors = true) }
+        repository.getSensors()
+    }
+
+    fun onSelectSensor(index: Int) {
+        repository.selectSensor(index)
+        // Optionally refresh after a small delay
+    }
+
+    fun onUnselectSensor() {
+        repository.unSelectSensor()
+    }
     fun selectFamily(family: TankFamily?) {
         _uiState.update { it.copy(selectedFamily = family, selectedModel = null) }
     }

@@ -5,6 +5,7 @@ import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient
 import com.wntechs.tankcontroller.data.model.ConfigResponse
 import com.wntechs.tankcontroller.data.model.MqttCredentials
+import com.wntechs.tankcontroller.data.model.SensorListResponse
 import com.wntechs.tankcontroller.data.model.StatusResponse
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -14,12 +15,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
 class MqttManager {
     private var client: Mqtt3AsyncClient? = null
     private val json = Json { ignoreUnknownKeys = true }
+
+    private val _sensorListFlow = MutableSharedFlow<SensorListResponse>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val sensorListFlow = _sensorListFlow.asSharedFlow()
 
     private val _statusFlow =
         MutableSharedFlow<StatusResponse>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -125,10 +131,23 @@ class MqttManager {
             val cleanTopic = topicFilter.replace("{uuid}", deviceUuid)
             Log.d("MqttManager", "Subscribing to: $cleanTopic")
             c.subscribeWith().topicFilter(cleanTopic).callback { p ->
+                val actualTopic = p.topic.toString() // Get the actual topic of the message
                 val payload = p.payloadAsBytes.decodeToString()
+
+                Log.d("MqttManager", "Raw message received on $actualTopic: $payload")
+
                 try {
                     when {
-                        cleanTopic.contains("/telemetry") || cleanTopic.contains("/state") -> {
+                        actualTopic.contains("/telemetry/result") -> {
+                            val jsonElement = json.parseToJsonElement(payload).jsonObject
+                            val command = jsonElement["command"]?.jsonPrimitive?.content
+                            if (command == "pairing/list") {
+                                val response = json.decodeFromString<SensorListResponse>(payload)
+                                _sensorListFlow.tryEmit(response)
+                                Log.d("MqttManager", "Emitted ${response.sensors.size} sensors to flow")
+                            }
+                        }
+                        actualTopic.contains("/telemetry") || actualTopic.contains("/state") -> {
                             if (payload.contains("water_level_percent")) {
                                 val status = json.decodeFromString<StatusResponse>(payload)
                                 _statusFlow.tryEmit(status)
@@ -137,15 +156,15 @@ class MqttManager {
                                 _configFlow.tryEmit(config)
                             }
                         }
-                        cleanTopic.contains("/availability") -> {
+                        actualTopic.contains("/availability") -> {
                             _availabilityFlow.tryEmit(payload.lowercase() == "online")
                         }
-                        cleanTopic.contains("/error") -> {
+                        actualTopic.contains("/error") -> {
                             _errorFlow.tryEmit(payload)
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("MqttManager", "Parse error on $cleanTopic: ${e.message}")
+                    Log.e("MqttManager", "Parse error on $actualTopic: ${e.message}")
                 }
             }.send().whenComplete { subAck, subError ->
                 if (subError != null) {
