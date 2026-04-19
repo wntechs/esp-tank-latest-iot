@@ -1,5 +1,6 @@
 package com.wntechs.tankcontroller.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -87,9 +88,15 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
 
     LaunchedEffect(pairingUiState.pairingSuccess) {
         if (pairingUiState.pairingSuccess) {
+            Log.d("AppRoot", "Pairing successful, navigating to Dashboard")
             navController.navigate(NavRoute.Dashboard.route) {
+                // This clears the pairing screen and everything before it (like Splash/Login)
+                // from the stack to prevent back-navigation to setup
                 popUpTo(NavRoute.Discovery.route) { inclusive = true }
+                launchSingleTop = true
             }
+            // Note: Do NOT call pairingViewModel.resetPairingState() here immediately.
+            // Let the navigation happen first.
         }
     }
 
@@ -151,7 +158,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                         NavigationBarItem(
                             selected = currentRoute == route.route,
                             onClick = {
-                                if (currentRoute != route.route) {
+                                /*if (currentRoute != route.route) {
                                     navController.navigate(route.route) {
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true
@@ -161,6 +168,14 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                                     }
                                 } else if (route.route == NavRoute.Dashboard.route) {
                                     navController.popBackStack(NavRoute.Dashboard.route, inclusive = false)
+                                }*/
+                                navController.navigate(route.route) {
+                                    // Pop up to the main dashboard to avoid stacking tabs
+                                    popUpTo(NavRoute.Dashboard.route) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
                             },
                             icon = { Icon(meta.second, null) },

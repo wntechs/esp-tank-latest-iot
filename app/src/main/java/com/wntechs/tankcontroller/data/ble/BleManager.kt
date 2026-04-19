@@ -136,6 +136,9 @@ class BleManager(private val context: Context) {
     private val _isScanning = MutableStateFlow(false)
     val isScanning = _isScanning.asStateFlow()
 
+    private val _isCommandQueueEmpty = MutableStateFlow(true)
+    val isCommandQueueEmpty = _isCommandQueueEmpty.asStateFlow()
+
     private data class PendingWifiNetwork(
         val index: Int,
         val rssi: Int,
@@ -286,6 +289,7 @@ class BleManager(private val context: Context) {
 
         pendingCommandWrites.clear()
         commandWriteInFlight = false
+        _isCommandQueueEmpty.value = true
     }
 
     fun provisionMqttCredentials(payload: MqttProvisioningPayload) {
@@ -311,6 +315,7 @@ class BleManager(private val context: Context) {
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 pendingCommandWrites.clear()
+                _isCommandQueueEmpty.value = true
                 _status.value = "Command write failed: $status"
                 Log.w(TAG, "Command write failed uuid=${characteristic.uuid} status=$status")
                 return
@@ -391,7 +396,7 @@ class BleManager(private val context: Context) {
                 Log.w(TAG, "Characteristic read failed uuid=${characteristic.uuid} status=$status")
                 return
             }
-            Log.d(TAG, "B: Device info raw payload: $characteristic.value")
+            Log.d(TAG, "B: Device info raw payload: ${characteristic.value}")
             val text = characteristic.value?.decodeToString().orEmpty()
             handleCharacteristicRead(characteristic.uuid, text)
         }
@@ -540,6 +545,7 @@ class BleManager(private val context: Context) {
         }
 
         pendingCommandWrites.addLast(command)
+        _isCommandQueueEmpty.value = false
         drainCommandQueue(gatt)
     }
 
@@ -562,7 +568,10 @@ class BleManager(private val context: Context) {
         sendCommand("""{"cmd":"code"}""")
     }
 
-
+    @SuppressLint("MissingPermission")
+    fun acknowledgeClaimCode() {
+        sendCommand("""{"cmd":"ack"}""")
+    }
 
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -579,6 +588,7 @@ class BleManager(private val context: Context) {
         pendingNotificationUuids.clear()
         pendingCommandWrites.clear()
         commandWriteInFlight = false
+        _isCommandQueueEmpty.value = true
         _connectionState.value = BluetoothProfile.STATE_DISCONNECTED
         _deviceInfo.value = null
         _claimCode.value = ""
@@ -749,7 +759,12 @@ class BleManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun drainCommandQueue(gatt: BluetoothGatt) {
-        if (commandWriteInFlight || pendingCommandWrites.isEmpty()) return
+        if (commandWriteInFlight) return
+        
+        if (pendingCommandWrites.isEmpty()) {
+            _isCommandQueueEmpty.value = true
+            return
+        }
 
         val service = gatt.getService(SERVICE_UUID) ?: run {
             _status.value = "BLE service unavailable"
@@ -778,18 +793,17 @@ class BleManager(private val context: Context) {
 
 
 
-    fun acknowledgeClaimCode() {
-        sendCommand("""{"cmd":"ack"}""")
-    }
-
-
-
-
 
     private fun sendProvisioningField(field: String, value: String) {
-        if (value.isBlank()) return
+        if (value.isEmpty()) {
+            Log.w(TAG, "Provisioning field '$field' is empty. Sending empty command.")
+            sendCommand("pv|$field|")
+            return
+        }
 
-        for (chunk in chunkUtf8Safe(value, 15)) {
+        // Split into chunks of ~16-18 bytes to stay within standard BLE MTU limits
+        val chunks = value.chunked(16)
+        chunks.forEach { chunk ->
             sendCommand("pv|$field|$chunk")
         }
     }

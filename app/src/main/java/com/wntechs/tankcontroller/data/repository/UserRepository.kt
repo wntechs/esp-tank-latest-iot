@@ -2,6 +2,8 @@ package com.wntechs.tankcontroller.data.repository
 
 import com.wntechs.tankcontroller.data.local.SettingsStore
 import com.wntechs.tankcontroller.data.model.LoginRequest
+import com.wntechs.tankcontroller.data.model.MobileProvisioningRequest
+import com.wntechs.tankcontroller.data.model.MobileProvisioningResponse
 import com.wntechs.tankcontroller.data.model.MqttCredentials
 import com.wntechs.tankcontroller.data.model.MqttCredentialsRequest
 import com.wntechs.tankcontroller.data.model.MqttRefreshRequest
@@ -100,6 +102,19 @@ class UserRepository(
         }
     }
 
+    suspend fun provisionDeviceMobile(request: MobileProvisioningRequest): AppResult<MobileProvisioningResponse> {
+        return try {
+            val response = authApi.provisionDeviceMobile(request)
+            if (response.isSuccessful) {
+                AppResult.Success(response.body()!!)
+            } else {
+                AppResult.Error(parseError(response))
+            }
+        } catch (e: Exception) {
+            AppResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
     suspend fun startPairing(code: String): AppResult<PairingResponse> {
         return try {
             val response = authApi.startPairing(PairingStartRequest(code))
@@ -130,7 +145,8 @@ class UserRepository(
         return try {
             val response = authApi.getProvisioningStatus(uuid, token)
             if (response.isSuccessful) {
-                AppResult.Success(response.body()!!)
+                val body = response.body() ?: return AppResult.Error("Empty response body")
+                AppResult.Success(body)
             } else {
                 AppResult.Error(parseError(response))
             }

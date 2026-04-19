@@ -4,6 +4,8 @@ import com.wntechs.tankcontroller.data.model.AuthResponse
 import com.wntechs.tankcontroller.data.model.DeviceListResponse
 import com.wntechs.tankcontroller.data.model.LoginRequest
 import com.wntechs.tankcontroller.data.model.MessageResponse
+import com.wntechs.tankcontroller.data.model.MobileProvisioningRequest
+import com.wntechs.tankcontroller.data.model.MobileProvisioningResponse
 import com.wntechs.tankcontroller.data.model.MqttCredentialsRequest
 import com.wntechs.tankcontroller.data.model.MqttCredentialsResponse
 import com.wntechs.tankcontroller.data.model.MqttRefreshRequest
@@ -53,4 +55,7 @@ interface AuthApi {
 
     @POST("devices/{uuid}/reset-request")
     suspend fun resetDevice(@Path("uuid") uuid: String, @Body body: Map<String, String> = emptyMap()): Response<MessageResponse>
+
+    @POST("devices/provision/mobile")
+    suspend fun provisionDeviceMobile(@Body request: MobileProvisioningRequest): Response<MobileProvisioningResponse>
 }

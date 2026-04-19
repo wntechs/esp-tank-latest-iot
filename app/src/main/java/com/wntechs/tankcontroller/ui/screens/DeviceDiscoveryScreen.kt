@@ -304,9 +304,13 @@ private fun BleProvisioningContent(
             }
         )
     }
-
+    // ADDED: Main scroll state for the whole content
+    val scrollState = rememberScrollState()
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState) // Allow the entire content to scroll
+            .padding(bottom = 32.dp), // Extra padding at bottom for better reach
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         when {
@@ -320,148 +324,79 @@ private fun BleProvisioningContent(
                     Text("Scan for Controllers")
                 }
 
-                LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(
-                        items = uiState.bleDevices,
-                        key = { it.address }
-                    ) { device ->
-                        val displayName = device.name?.takeIf { it.isNotBlank() } ?: "Unnamed Device"
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable { onConnect(device) }
+                // Changed LazyColumn to a regular Column with forEach
+                // because nested scrolling LazyColumns are problematic.
+                uiState.bleDevices.forEach { device ->
+                    val displayName = device.name?.takeIf { it.isNotBlank() } ?: "Unnamed Device"
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onConnect(device) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Bluetooth,
-                                    contentDescription = null
-                                )
-
-                                Spacer(Modifier.width(16.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = displayName,
-                                        fontWeight = FontWeight.Bold
-                                    )
-
-                                    Text(
-                                        text = device.address,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-
-                                    Text(
-                                        text = "Signal: ${device.rssi} dBm",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-
-                                    if (device.serviceUuids.isNotEmpty()) {
-                                        Text(
-                                            text = "Services: ${
-                                                device.serviceUuids.joinToString(
-                                                    limit = 2,
-                                                    truncated = " +more"
-                                                ) { it.toString() }
-                                            }",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
+                            Icon(Icons.Default.Bluetooth, contentDescription = null)
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text(text = displayName, fontWeight = FontWeight.Bold)
+                                Text(text = device.address, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
                 }
             }
 
-            uiState.bleConnectionState == BluetoothProfile.STATE_CONNECTING -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = "Connecting to Controller...",
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                    }
-                }
-            }
-
             uiState.bleConnectionState == BluetoothProfile.STATE_CONNECTED -> {
-                SectionCard("Device Info") {
-                    val info = uiState.bleDeviceInfo
+                Text(
+                    text = "Connected to ${uiState.bleDeviceInfo?.device_id ?: "Device"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
 
-                    if (info == null) {
-                        Text(
-                            text = "Reading device info...",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else {
-                        BleInfoRow("Relay ID", info.device_id)
-                        BleInfoRow("Device UUID", shortHashStyle(info.device_uuid))
-                        BleInfoRow("Bootstrap Token", info.factory_bootstrap_token)
-                        BleInfoRow("Firmware", info.firmware_version)
-                        BleInfoRow("WiFi", if (info.wifi_connected) "Connected" else "Not Connected")
-                        BleInfoRow("State", info.state)
-                    }
-
-                    if (uiState.bleStatus.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "Status: ${uiState.bleStatus}",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                Button(
+                    onClick = onScanWifi,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Wifi, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Scan WiFi Networks")
                 }
 
-                SectionCard("Provision WiFi") {
-                    Button(
-                        onClick = onScanWifi,
-                        modifier = Modifier.fillMaxWidth()
+                // Display WiFi Networks
+                uiState.wifiNetworks.forEach { network ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedSsid = network.ssid
+                                showWifiDialog = true
+                            }
                     ) {
-                        Icon(Icons.Default.Wifi, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Scan WiFi Networks")
-                    }
-
-                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                        items(uiState.wifiNetworks) { network ->
-                            ListItem(
-                                headlineContent = { Text(network.ssid) },
-                                supportingContent = {
-                                    Text(
-                                        "Signal: ${network.rssi} dBm • " +
-                                                if (network.secure) "Secured" else "Open"
-                                    )
-                                },
-                                modifier = Modifier.clickable {
-                                    selectedSsid = network.ssid
-                                    showWifiDialog = true
-                                }
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (network.secure) Icons.Default.WifiLock else Icons.Default.Wifi,
+                                contentDescription = null
                             )
+                            Spacer(Modifier.width(16.dp))
+                            Text(text = network.ssid, modifier = Modifier.weight(1f))
+                            Text(text = "${network.rssi} dBm", style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                }
 
-                    OutlinedButton(
-                        onClick = { showWifiDialog = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Enter WiFi Manually")
-                    }
+                if (uiState.bleStatus.isNotBlank()) {
+                    Text(
+                        text = "Status: ${uiState.bleStatus}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
-        }
-
-        if (uiState.error != null) {
-            MessageBanner(text = uiState.error, isError = true)
         }
     }
 }
