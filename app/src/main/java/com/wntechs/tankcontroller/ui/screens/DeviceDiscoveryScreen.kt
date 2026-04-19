@@ -43,53 +43,45 @@ import com.wntechs.tankcontroller.data.ble.BleScanItem
 @Composable
 fun DeviceDiscoveryScreen(
     uiState: PairingUiState,
-    onStartPairing: (String) -> Unit,
-    onDiscoveryModeChanged: (DiscoveryMode) -> Unit,
     onScanBleDevices: () -> Unit,
     onConnectBleDevice: (BleScanItem) -> Unit,
     onScanWifi: () -> Unit,
     onProvisionWifi: (String, String) -> Unit
 ) {
+    // We removed the TabRow and the conditional 'when' block
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        TabRow(selectedTabIndex = uiState.discoveryMode.ordinal) {
-            Tab(
-                selected = uiState.discoveryMode == DiscoveryMode.PAIRING_CODE,
-                onClick = { onDiscoveryModeChanged(DiscoveryMode.PAIRING_CODE) },
-                text = { Text("Pairing Code") }
-            )
-            Tab(
-                selected = uiState.discoveryMode == DiscoveryMode.BLE,
-                onClick = { onDiscoveryModeChanged(DiscoveryMode.BLE) },
-                text = { Text("Bluetooth (BLE)") }
-            )
-        }
+        Text(
+            text = "Setup New Controller",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Connect to your device via Bluetooth to configure WiFi and Cloud settings.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
 
-        when (uiState.discoveryMode) {
-            DiscoveryMode.PAIRING_CODE -> {
-                PairingCodeContent(
-                    uiState = uiState,
-                    onStartPairing = onStartPairing
-                )
-            }
-            DiscoveryMode.BLE -> {
-                BleProvisioningContent(
-                    uiState = uiState,
-                    onScanDevices = onScanBleDevices,
-                    onConnect = onConnectBleDevice,
-                    onScanWifi = onScanWifi,
-                    onProvision = onProvisionWifi,
-                )
-            }
-        }
+        // Directly show the BLE content
+        BleProvisioningContent(
+            uiState = uiState,
+            onScanDevices = onScanBleDevices,
+            onConnect = onConnectBleDevice,
+            onScanWifi = onScanWifi,
+            onProvision = onProvisionWifi,
+        )
     }
 }
+
+// Keep BleProvisioningContent as is (with the scroll fix we implemented earlier),
+// but ensure it's the only logic present in the file.
 
 @Composable
 private fun PairingCodeContent(
@@ -213,15 +205,11 @@ private fun BleProvisioningContent(
 
     LaunchedEffect(Unit) {
         hasPermissions = hasAllPermissions()
-    }
-
-    LaunchedEffect(uiState.discoveryMode) {
-        hasPermissions = hasAllPermissions()
-
         if (!hasPermissions && !hasPermanentDenial()) {
             requestPermissions()
         }
     }
+
 
     var showWifiDialog by remember { mutableStateOf(false) }
     var selectedSsid by remember { mutableStateOf("") }
@@ -416,11 +404,8 @@ fun DeviceDiscoveryCodePreview() {
     TankControllerTheme {
         DeviceDiscoveryScreen(
             uiState = PairingUiState(
-                discoveryMode = DiscoveryMode.PAIRING_CODE,
                 status = "Starting pairing..."
             ),
-            onStartPairing = {},
-            onDiscoveryModeChanged = {},
             onScanBleDevices = {},
             onConnectBleDevice = {},
             onScanWifi = {},
@@ -435,7 +420,6 @@ fun DeviceDiscoveryBlePreview() {
     TankControllerTheme {
         DeviceDiscoveryScreen(
             uiState = PairingUiState(
-                discoveryMode = DiscoveryMode.BLE,
                 bleConnectionState = BluetoothProfile.STATE_CONNECTED,
                 bleDeviceInfo = BleDeviceInfo(
                     device_id = "ESP32-WNT-01",
@@ -444,8 +428,6 @@ fun DeviceDiscoveryBlePreview() {
                 ),
                 bleStatus = "Scanning WiFi..."
             ),
-            onStartPairing = {},
-            onDiscoveryModeChanged = {},
             onScanBleDevices = {},
             onConnectBleDevice = {},
             onScanWifi = {},

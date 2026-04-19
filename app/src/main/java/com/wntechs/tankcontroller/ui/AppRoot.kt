@@ -88,15 +88,9 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
 
     LaunchedEffect(pairingUiState.pairingSuccess) {
         if (pairingUiState.pairingSuccess) {
-            Log.d("AppRoot", "Pairing successful, navigating to Dashboard")
             navController.navigate(NavRoute.Dashboard.route) {
-                // This clears the pairing screen and everything before it (like Splash/Login)
-                // from the stack to prevent back-navigation to setup
                 popUpTo(NavRoute.Discovery.route) { inclusive = true }
-                launchSingleTop = true
             }
-            // Note: Do NOT call pairingViewModel.resetPairingState() here immediately.
-            // Let the navigation happen first.
         }
     }
 
@@ -204,8 +198,6 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                 Box(modifier = Modifier.padding(innerPadding)) {
                     DeviceDiscoveryScreen(
                         uiState = pairingUiState,
-                        onStartPairing = pairingViewModel::startPairing,
-                        onDiscoveryModeChanged = pairingViewModel::setDiscoveryMode,
                         onScanBleDevices = pairingViewModel::startBleScan,
                         onConnectBleDevice = pairingViewModel::connectBleDevice,
                         onScanWifi = pairingViewModel::scanWifi,

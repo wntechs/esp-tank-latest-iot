@@ -27,7 +27,7 @@ data class PairingUiState(
     val status: String? = null,
     val error: String? = null,
     val pairingSuccess: Boolean = false,
-    val discoveryMode: DiscoveryMode = DiscoveryMode.PAIRING_CODE,
+    // discoveryMode removed
     val bleDevices: List<BleScanItem> = emptyList(),
     val bleConnectionState: Int = BluetoothProfile.STATE_DISCONNECTED,
     val bleDeviceInfo: BleDeviceInfo? = null,
@@ -104,24 +104,34 @@ class PairingViewModel(
         viewModelScope.launch {
             combine(
                 bleManager.status,
-                bleManager.isCommandQueueEmpty
-            ) { status, isQueueEmpty ->
-                status to isQueueEmpty
-            }.collectLatest { (status, isQueueEmpty) ->
+                bleManager.isCommandQueueEmpty,
+                bleManager.connectionState // Added connectionState to the mix
+            ) { status, isQueueEmpty, connState ->
+                Triple(status, isQueueEmpty, connState)
+            }.collectLatest { (status, isQueueEmpty, connState) ->
                 _uiState.update { it.copy(bleStatus = status) }
-                
+
                 val currentState = _uiState.value
-                
-                // If we already succeeded, don't trigger anything else
                 if (currentState.pairingSuccess) return@collectLatest
 
+                // Trigger provisioning when hardware is ready
                 if (status == "ok" && !currentState.isMqttProvisioning) {
-                    // Start cloud provisioning now that hardware is on WiFi
+                    // Only trigger if we aren't already middle-of-cloud-provisioning
+                    // We check !currentState.isMqttProvisioning specifically.
+                    Log.d("PairingViewModel", "Status is 'ok'. Starting Cloud Finalization...")
                     finalizeBleProvisioning()
-                } else if (currentState.isMqttProvisioning && isQueueEmpty) {
-                    // Only treat as terminal success if the app has finished sending all commands
-                    // AND the device reports a provisioned or connected status.
+                }
+
+                // NAVIGATION TRIGGER LOGIC
+                if (currentState.isMqttProvisioning && isQueueEmpty) {
+                    // Scenario A: Hardware explicitly says "done"
                     if (status == "done") {
+                        Log.d("PairingViewModel", "Provisioning confirmed by device (done)")
+                        completeBlePairing()
+                    }
+                    // Scenario B: Hardware disconnects after pv|c (common during reboot)
+                    else if (connState == BluetoothProfile.STATE_DISCONNECTED) {
+                        Log.d("PairingViewModel", "Success condition met (Status: $status, Conn: $connState)")
                         completeBlePairing()
                     }
                 }
@@ -143,12 +153,6 @@ class PairingViewModel(
         }
     }
 
-    fun setDiscoveryMode(mode: DiscoveryMode) {
-        _uiState.update { it.copy(discoveryMode = mode, error = null, status = null) }
-        if (mode != DiscoveryMode.BLE) {
-            stopBleScan()
-        }
-    }
 
     fun startBleScan() {
         _uiState.update { it.copy(bleDevices = emptyList(), error = null, status = "Scanning for controllers...") }
@@ -189,6 +193,9 @@ class PairingViewModel(
 
     private fun finalizeBleProvisioning() {
         val info = _uiState.value.bleDeviceInfo ?: return
+        // If we are already doing MQTT provisioning, don't restart
+        if (_uiState.value.isMqttProvisioning) return
+
         if (info.device_uuid.isBlank() || info.factory_bootstrap_token.isBlank()) {
             _uiState.update { it.copy(isLoading = false, error = "Device not ready for cloud registration") }
             return
@@ -247,13 +254,11 @@ class PairingViewModel(
     }
     fun resetPairingState() {
         _uiState.update {
-            PairingUiState(
-                discoveryMode = it.discoveryMode // Keep the user's preferred mode
-            )
+            PairingUiState() // Resets everything to default
         }
-        // Also ensure BLE is disconnected if we are resetting
         bleManager.disconnect()
     }
+
     private fun completeBlePairing() {
         val deviceUuid = _uiState.value.bleDeviceInfo?.device_uuid ?: run {
             _uiState.update {
