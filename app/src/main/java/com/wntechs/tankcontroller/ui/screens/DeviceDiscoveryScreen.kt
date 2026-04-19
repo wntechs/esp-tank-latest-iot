@@ -49,6 +49,8 @@ fun DeviceDiscoveryScreen(
     onConnectBleDevice: (BleScanItem) -> Unit,
     onScanWifi: () -> Unit,
     onProvisionWifi: (String, String) -> Unit,
+    onRefreshClaimCode: () -> Unit,
+    onRequestClaimCode: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -84,7 +86,9 @@ fun DeviceDiscoveryScreen(
                     onScanDevices = onScanBleDevices,
                     onConnect = onConnectBleDevice,
                     onScanWifi = onScanWifi,
-                    onProvision = onProvisionWifi
+                    onProvision = onProvisionWifi,
+                    onRefreshClaimCode = onRefreshClaimCode,
+                    onRequestClaimCode = onRequestClaimCode
                 )
             }
         }
@@ -158,7 +162,9 @@ private fun BleProvisioningContent(
     onScanDevices: () -> Unit,
     onConnect: (BleScanItem) -> Unit,
     onScanWifi: () -> Unit,
-    onProvision: (String, String) -> Unit
+    onProvision: (String, String) -> Unit,
+    onRefreshClaimCode: () -> Unit,
+    onRequestClaimCode: () -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -412,6 +418,38 @@ private fun BleProvisioningContent(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
+
+                    if (uiState.bleClaimCode.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Claim Code: ${uiState.bleClaimCode}",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        Text(
+                            text = "This code was received from the device automatically.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onRefreshClaimCode,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Refresh Code")
+                        }
+
+                        Button(
+                            onClick = onRequestClaimCode,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Resend Code")
+                        }
+                    }
                 }
 
                 SectionCard("Provision WiFi") {
@@ -458,6 +496,7 @@ private fun BleProvisioningContent(
     }
 }
 
+
 @Composable
 private fun BleInfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -480,7 +519,9 @@ fun DeviceDiscoveryCodePreview() {
             onScanBleDevices = {},
             onConnectBleDevice = {},
             onScanWifi = {},
-            onProvisionWifi = { _, _ -> }
+            onProvisionWifi = { _, _ -> },
+            onRefreshClaimCode = {},
+            onRequestClaimCode = {}
         )
     }
 }
@@ -505,7 +546,9 @@ fun DeviceDiscoveryBlePreview() {
             onScanBleDevices = {},
             onConnectBleDevice = {},
             onScanWifi = {},
-            onProvisionWifi = { _, _ -> }
+            onProvisionWifi = { _, _ -> },
+            onRefreshClaimCode = {},
+            onRequestClaimCode = {}
         )
     }
 }

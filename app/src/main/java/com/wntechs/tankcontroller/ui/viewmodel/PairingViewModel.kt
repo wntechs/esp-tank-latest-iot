@@ -6,12 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.wntechs.tankcontroller.data.ble.BleDeviceInfo
 import com.wntechs.tankcontroller.data.ble.BleManager
 import com.wntechs.tankcontroller.data.ble.BleScanItem
+
 import com.wntechs.tankcontroller.data.ble.WifiScanResult
 import com.wntechs.tankcontroller.data.repository.DeviceRepository
 import com.wntechs.tankcontroller.data.repository.UserRepository
 import com.wntechs.tankcontroller.util.AppResult
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +28,16 @@ data class PairingUiState(
     val bleConnectionState: Int = BluetoothProfile.STATE_DISCONNECTED,
     val bleDeviceInfo: BleDeviceInfo? = null,
     val wifiNetworks: List<WifiScanResult> = emptyList(),
-    val bleStatus: String = ""
+    val bleStatus: String = "",
+    val bleClaimCode: String = ""
+)
+
+data class MqttProvisioningPayload(
+    val host: String,
+    val port: Int,
+    val clientId: String,
+    val username: String,
+    val password: String
 )
 
 enum class DiscoveryMode {
@@ -39,19 +47,20 @@ enum class DiscoveryMode {
 class PairingViewModel(
     private val userRepository: UserRepository,
     private val deviceRepository: DeviceRepository,
-    private val bleManager: BleManager
+    private val bleManager: BleManager,
+
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PairingUiState())
     val uiState: StateFlow<PairingUiState> = _uiState.asStateFlow()
-
-    private var provisioningPollJob: Job? = null
+    private var lastAutoClaimCode: String = ""
 
     init {
         observeBleScanResults()
         observeConnectionState()
         observeDeviceInfo()
         observeBleStatus()
+        observeBleClaimCode()
         observeWifiNetworks()
     }
 
@@ -83,6 +92,11 @@ class PairingViewModel(
                         isLoading = connectionState == BluetoothProfile.STATE_CONNECTING
                     )
                 }
+
+                if (connectionState == BluetoothProfile.STATE_DISCONNECTED) {
+                    lastAutoClaimCode = ""
+                    _uiState.update { it.copy(bleClaimCode = "") }
+                }
             }
         }
     }
@@ -100,8 +114,31 @@ class PairingViewModel(
             bleManager.status.collectLatest { status ->
                 _uiState.update { it.copy(bleStatus = status) }
 
-                if (status == "ok") {
-                    finalizeBlePairing()
+                when {
+                    status.startsWith("claim:") -> {
+                        val claimCode = status.removePrefix("claim:").trim()
+                        _uiState.update {
+                            it.copy(
+                                bleClaimCode = claimCode,
+                                status = "Claim code received"
+                            )
+                        }
+                        autoStartClaimPairing(claimCode)
+                    }
+
+                }
+            }
+        }
+    }
+
+    private fun observeBleClaimCode() {
+        viewModelScope.launch {
+            bleManager.claimCode.collectLatest { code ->
+                val claimCode = code.trim()
+                _uiState.update { it.copy(bleClaimCode = claimCode) }
+
+                if (claimCode.isNotBlank()) {
+                    autoStartClaimPairing(claimCode)
                 }
             }
         }
@@ -213,10 +250,7 @@ class PairingViewModel(
         bleManager.setWifi(ssid, pass)
     }
 
-    private fun finalizeBlePairing() {
-        val deviceId = _uiState.value.bleDeviceInfo?.device_id ?: return
-        finalizePairing(deviceId)
-    }
+
 
     fun startPairing(code: String) {
         viewModelScope.launch {
@@ -235,25 +269,64 @@ class PairingViewModel(
                     }
 
                     val responseData = startResult.data.data
-                    val token = responseData?.token ?: return@launch run {
+                    val token = responseData?.token ?: run {
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
                                 error = "No session token returned"
                             )
                         }
+                        return@launch
                     }
 
                     val deviceUuid = responseData.device?.uuid
+                    if (!deviceUuid.isNullOrBlank()) {
+                        deviceRepository.saveDeviceId(deviceUuid)
+                    }
 
                     when (val claimResult = userRepository.claimDevice(token)) {
                         is AppResult.Success -> {
                             _uiState.update {
-                                it.copy(status = "Device claimed, waiting for provisioning...")
+                                it.copy(status = "Device claimed. Fetching provisioning data...")
                             }
 
                             val claimToken = claimResult.data.data?.token ?: token
-                            pollProvisioningStatus(deviceUuid.orEmpty(), claimToken)
+
+                            bleManager.acknowledgeClaimCode()
+
+                            when (val provisioningResult = deviceRepository.fetchMqttProvisioningCredentials()) {
+                                is AppResult.Success -> {
+                                    val creds = provisioningResult.data
+
+                                    bleManager.sendMqttProvisioning(
+                                        MqttProvisioningPayload(
+                                            host = creds.host,
+                                            port = creds.port,
+                                            clientId = creds.clientId,
+                                            username = creds.username,
+                                            password = creds.password
+                                        )
+                                    )
+                                    bleManager.commitMqttProvisioning()
+
+                                    _uiState.update {
+                                        it.copy(
+                                            isLoading = false,
+                                            pairingSuccess = true,
+                                            status = "MQTT provisioning sent to device"
+                                        )
+                                    }
+                                }
+
+                                is AppResult.Error -> {
+                                    _uiState.update {
+                                        it.copy(
+                                            isLoading = false,
+                                            error = provisioningResult.message
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         is AppResult.Error -> {
@@ -279,96 +352,39 @@ class PairingViewModel(
         }
     }
 
-    private fun pollProvisioningStatus(deviceUuid: String, token: String) {
-        provisioningPollJob?.cancel()
 
-        provisioningPollJob = viewModelScope.launch {
-            var isReady = false
-            var attempts = 0
 
-            while (!isReady && attempts < 30) {
-                attempts++
 
-                when (val statusResult = userRepository.getProvisioningStatus(deviceUuid, token)) {
-                    is AppResult.Success -> {
-                        val statusData = statusResult.data.data
-                        if (statusData != null) {
-                            val status = statusData.status
+    private fun autoStartClaimPairing(code: String) {
+        if (code.isBlank()) return
+        if (code == lastAutoClaimCode) return
 
-                            _uiState.update {
-                                it.copy(status = "Provisioning status: $status")
-                            }
-
-                            when (status) {
-                                "ready_to_finalize" -> {
-                                    isReady = true
-                                    finalizePairing(statusData.uuid ?: deviceUuid)
-                                }
-
-                                "expired" -> {
-                                    _uiState.update {
-                                        it.copy(
-                                            isLoading = false,
-                                            error = "Pairing session expired"
-                                        )
-                                    }
-                                    return@launch
-                                }
-                            }
-                        }
-                    }
-
-                    is AppResult.Error -> {
-                        // keep polling quietly
-                    }
-                }
-
-                delay(2000)
-            }
-
-            if (!isReady) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "Provisioning timed out"
-                    )
-                }
-            }
-        }
+        lastAutoClaimCode = code
+        startPairing(code)
     }
 
-    private fun finalizePairing(deviceUuid: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(status = "Finalizing pairing...") }
+    fun readBleStatus() {
+        bleManager.readStatus()
+    }
 
-            deviceRepository.saveDeviceId(deviceUuid)
+    fun requestClaimCode() {
+        bleManager.requestClaimCode()
+    }
 
-            when (val mqttResult = deviceRepository.connectWithDynamicCredentials()) {
-                is AppResult.Success -> {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            status = "Pairing complete!",
-                            pairingSuccess = true
-                        )
-                    }
-                }
+    private fun sendProvisioningToDevice(payload: MqttProvisioningPayload) {
+        bleManager.acknowledgeClaimCode()
+        bleManager.sendMqttProvisioning(payload)
+        bleManager.commitMqttProvisioning()
 
-                is AppResult.Error -> {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            error = "Failed to get MQTT credentials: ${mqttResult.message}"
-                        )
-                    }
-                }
-            }
+        _uiState.update {
+            it.copy(
+                status = "Provisioning sent to device. Waiting for reboot..."
+            )
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        provisioningPollJob?.cancel()
 
         try {
             bleManager.stopScan()

@@ -21,6 +21,7 @@ import android.os.ParcelUuid
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
+import com.wntechs.tankcontroller.ui.viewmodel.MqttProvisioningPayload
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -74,6 +75,8 @@ private data class BleCommand(
     @SerialName("password") val password: String? = null
 )
 
+
+
 data class BleScanItem(
     val device: BluetoothDevice,
     val address: String,
@@ -81,6 +84,7 @@ data class BleScanItem(
     val rssi: Int,
     val serviceUuids: List<UUID> = emptyList()
 )
+
 
 class BleManager(private val context: Context) {
 
@@ -94,6 +98,9 @@ class BleManager(private val context: Context) {
         private val CHAR_WIFI_SCAN_UUID = UUID.fromString("12345678-1234-1234-1234-1234567890A4")
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
+
+    private val pendingCommandWrites = ArrayDeque<String>()
+    private var commandWriteInFlight = false
     private val wifiScanBuffer = StringBuilder()
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -120,6 +127,9 @@ class BleManager(private val context: Context) {
 
     private val _status = MutableStateFlow("")
     val status = _status.asStateFlow()
+
+    private val _claimCode = MutableStateFlow("")
+    val claimCode = _claimCode.asStateFlow()
 
     private val _wifiNetworks = MutableSharedFlow<WifiScanResult>(extraBufferCapacity = 64)
     val wifiNetworks = _wifiNetworks.asSharedFlow()
@@ -273,9 +283,34 @@ class BleManager(private val context: Context) {
         _connectionState.value = BluetoothProfile.STATE_DISCONNECTED
         _deviceInfo.value = null
         _status.value = ""
+        _claimCode.value = ""
+
+        pendingCommandWrites.clear()
+        commandWriteInFlight = false
     }
 
+
+
     private val gattCallback = object : BluetoothGattCallback() {
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            if (characteristic.uuid != CHAR_COMMAND_UUID) return
+
+            commandWriteInFlight = false
+
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                pendingCommandWrites.clear()
+                _status.value = "Command write failed: $status"
+                Log.w(TAG, "Command write failed uuid=${characteristic.uuid} status=$status")
+                return
+            }
+
+            drainCommandQueue(gatt)
+        }
 
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -341,6 +376,11 @@ class BleManager(private val context: Context) {
                     Log.d(TAG, "Device info: $value")
                     _deviceInfo.value = parseDeviceInfo(value)
                 }
+
+                CHAR_STATUS_UUID -> {
+                    Log.d(TAG, "Status read: $value")
+                    handleStatusFrame(value)
+                }
             }
         }
 
@@ -353,7 +393,7 @@ class BleManager(private val context: Context) {
             when (characteristic.uuid) {
                 CHAR_STATUS_UUID -> {
                     Log.d(TAG, "Status changed: $value")
-                    _status.value = value.trim()
+                    handleStatusFrame(value)
                 }
 
                 CHAR_WIFI_SCAN_UUID -> {
@@ -378,6 +418,7 @@ class BleManager(private val context: Context) {
             if (pendingNotificationUuids.isNotEmpty()) {
                 enableNextNotification(gatt)
             } else {
+                readStatus(gatt)
                 readDeviceInfo(gatt)
             }
         }
@@ -451,31 +492,43 @@ class BleManager(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
+    fun readStatus() {
+        val gatt = bluetoothGatt ?: run {
+            _status.value = "Not connected"
+            return
+        }
+
+        readStatus(gatt)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun readStatus(gatt: BluetoothGatt) {
+        val service = gatt.getService(SERVICE_UUID) ?: run {
+            _status.value = "Service unavailable"
+            return
+        }
+
+        val characteristic = service.getCharacteristic(CHAR_STATUS_UUID) ?: run {
+            _status.value = "Status characteristic unavailable"
+            return
+        }
+
+        val started = gatt.readCharacteristic(characteristic)
+        if (!started) {
+            _status.value = "Failed to read status"
+            Log.w(TAG, "readCharacteristic failed to start for status")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     fun sendCommand(command: String) {
         val gatt = bluetoothGatt ?: run {
             _status.value = "Not connected"
             return
         }
 
-        val service = gatt.getService(SERVICE_UUID) ?: run {
-            _status.value = "BLE service unavailable"
-            return
-        }
-
-        val characteristic = service.getCharacteristic(CHAR_COMMAND_UUID) ?: run {
-            _status.value = "Command characteristic unavailable"
-            return
-        }
-
-        characteristic.value = command.toByteArray(Charsets.UTF_8)
-        val started = gatt.writeCharacteristic(characteristic)
-
-        if (!started) {
-            _status.value = "Failed to send command"
-            Log.w(TAG, "writeCharacteristic failed to start")
-        } else {
-            Log.d(TAG, "Command sent: $command")
-        }
+        pendingCommandWrites.addLast(command)
+        drainCommandQueue(gatt)
     }
 
     fun scanWifi() {
@@ -493,6 +546,13 @@ class BleManager(private val context: Context) {
         sendCommand(payload)
     }
 
+    fun requestClaimCode() {
+        sendCommand("""{"cmd":"code"}""")
+    }
+
+
+
+
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun safeCloseGatt(gatt: BluetoothGatt) {
         try {
@@ -507,6 +567,7 @@ class BleManager(private val context: Context) {
         pendingNotificationUuids.clear()
         _connectionState.value = BluetoothProfile.STATE_DISCONNECTED
         _deviceInfo.value = null
+        _claimCode.value = ""
     }
 
     private fun safeDeviceName(device: BleScanItem): String {
@@ -539,6 +600,18 @@ class BleManager(private val context: Context) {
             ) == PackageManager.PERMISSION_GRANTED
         } else {
             true
+        }
+    }
+
+    private fun handleStatusFrame(frame: String) {
+        val text = frame.trim()
+        _status.value = text
+
+        if (text.startsWith("claim:")) {
+            _claimCode.value = text.removePrefix("claim:").trim()
+            Log.d(TAG, "Claim code updated: ${_claimCode.value}")
+        } else {
+            _claimCode.value = ""
         }
     }
 
@@ -630,6 +703,7 @@ class BleManager(private val context: Context) {
             }
         }
     }
+
     private fun parseDeviceInfo(raw: String): BleDeviceInfo {
         return try {
             val map = raw
@@ -654,5 +728,93 @@ class BleManager(private val context: Context) {
             Log.e(TAG, "Failed to parse compact device info: $raw", e)
             BleDeviceInfo()
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun drainCommandQueue(gatt: BluetoothGatt) {
+        if (commandWriteInFlight || pendingCommandWrites.isEmpty()) return
+
+        val service = gatt.getService(SERVICE_UUID) ?: run {
+            _status.value = "BLE service unavailable"
+            return
+        }
+
+        val characteristic = service.getCharacteristic(CHAR_COMMAND_UUID) ?: run {
+            _status.value = "Command characteristic unavailable"
+            return
+        }
+
+        val command = pendingCommandWrites.removeFirst()
+        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        characteristic.value = command.toByteArray(Charsets.UTF_8)
+
+        commandWriteInFlight = gatt.writeCharacteristic(characteristic)
+        if (!commandWriteInFlight) {
+            pendingCommandWrites.addFirst(command)
+            _status.value = "Failed to send command"
+            Log.w(TAG, "writeCharacteristic failed to start")
+        } else {
+            Log.d(TAG, "Command sent: $command")
+        }
+    }
+
+
+
+
+    fun acknowledgeClaimCode() {
+        sendCommand("""{"cmd":"ack"}""")
+    }
+
+    fun beginMqttProvisioning() {
+        sendCommand("pv|b")
+    }
+
+    fun commitMqttProvisioning() {
+        sendCommand("pv|c")
+    }
+
+    fun sendMqttProvisioning(payload: MqttProvisioningPayload) {
+        beginMqttProvisioning()
+        sendProvisioningField("h", payload.host)
+        sendProvisioningField("i", payload.clientId)
+        sendProvisioningField("u", payload.username)
+        sendProvisioningField("p", payload.password)
+        sendCommand("pv|o|${payload.port}")
+    }
+
+    private fun sendProvisioningField(field: String, value: String) {
+        if (value.isBlank()) return
+
+        for (chunk in chunkUtf8Safe(value, 15)) {
+            sendCommand("pv|$field|$chunk")
+        }
+    }
+
+    private fun chunkUtf8Safe(value: String, maxBytes: Int): List<String> {
+        if (value.isEmpty()) return emptyList()
+
+        val chunks = mutableListOf<String>()
+        var start = 0
+
+        while (start < value.length) {
+            var end = start
+            var byteCount = 0
+
+            while (end < value.length) {
+                val charBytes = value[end].toString().toByteArray(Charsets.UTF_8).size
+                if (byteCount + charBytes > maxBytes) break
+                byteCount += charBytes
+                end++
+            }
+
+            if (end == start) {
+                end = (start + 1).coerceAtMost(value.length)
+            }
+
+            chunks.add(value.substring(start, end))
+            start = end
+        }
+
+        return chunks
     }
 }

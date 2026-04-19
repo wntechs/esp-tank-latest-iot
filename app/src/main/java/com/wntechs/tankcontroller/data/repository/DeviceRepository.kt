@@ -161,6 +161,34 @@ class DeviceRepository(
     suspend fun saveDeviceId(id: String) {
         settingsStore.saveDeviceId(id)
     }
+
+    suspend fun fetchMqttProvisioningCredentials(): AppResult<MqttCredentials> {
+        val auth = authState.first()
+        if (!auth.isLoggedIn) return AppResult.Error("User is not logged in")
+
+        val deviceUuid = settings.first().deviceId
+        if (deviceUuid.isBlank()) return AppResult.Error("Device UUID is missing")
+
+        val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}"
+        val appKey = settingsStore.appDeviceKeyFlow.first()
+
+        val existingCreds = settingsStore.mqttCredsFlow.first()
+        if (existingCreds != null) {
+            Log.d("DeviceRepository", "Found stored MQTT creds. Using them for provisioning...")
+            return AppResult.Success(existingCreds)
+        }
+
+        Log.d("DeviceRepository", "Attempting MQTT credential refresh...")
+        when (val refreshResult = userRepository.refreshMqttCredentials(deviceUuid, appKey)) {
+            is AppResult.Success -> return AppResult.Success(refreshResult.data)
+            is AppResult.Error -> Log.d("DeviceRepository", "Refresh failed, issuing fresh creds: ${refreshResult.message}")
+        }
+
+        return when (val issueResult = userRepository.getMqttCredentials(deviceUuid, deviceName, appKey)) {
+            is AppResult.Success -> AppResult.Success(issueResult.data)
+            is AppResult.Error -> AppResult.Error(issueResult.message)
+        }
+    }
 }
 
 sealed class MqttConnectionState {
