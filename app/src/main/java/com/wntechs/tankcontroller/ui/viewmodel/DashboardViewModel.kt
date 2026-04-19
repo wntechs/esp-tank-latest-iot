@@ -88,6 +88,11 @@ class DashboardViewModel(
         repository.setManual(state)
     }
 
+    fun rebootController() {
+        _uiState.update { it.copy(loading = true) }
+        repository.rebootDevice()
+    }
+
     fun returnAuto() {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true, error = null, message = null) }

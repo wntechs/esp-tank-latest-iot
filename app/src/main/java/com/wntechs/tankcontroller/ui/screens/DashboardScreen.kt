@@ -42,7 +42,7 @@ fun DashboardScreen(
     onTurnOn: () -> Unit,
     onTurnOff: () -> Unit,
     onReturnAuto: () -> Unit,
-    onOpenConfig: () -> Unit,
+    onReboot: () -> Unit,
     onNavigateToDiscovery: () -> Unit,
 ) {
     Column(
@@ -125,6 +125,26 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            SectionCard("Maintenance") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            enabled = uiState.connectionState is MqttConnectionState.Connected,
+                            onClick = onReboot,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF43A047)) // Green
+                        ) {
+                            Text("Reboot Controller")
+                        }
+
+                    }
+
+                }
+            }
         }
 
         if (uiState.error != null) MessageBanner(uiState.error, isError = true)
@@ -205,7 +225,7 @@ fun DashboardPreview() {
             onTurnOn = {},
             onTurnOff = {},
             onReturnAuto = {},
-            onOpenConfig = {},
+            onReboot = {},
             onNavigateToDiscovery = {},
         )
     }

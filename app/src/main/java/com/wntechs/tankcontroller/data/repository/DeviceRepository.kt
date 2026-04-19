@@ -142,6 +142,12 @@ class DeviceRepository(
         mqttManager.publish(getPublishTopic("manual"), cmd)
     }
 
+    fun rebootDevice() {
+        if (currentDeviceUuid.isBlank()) return
+
+        mqttManager.publish(getPublishTopic("reboot"))
+    }
+
     fun setAuto() {
         if (currentDeviceUuid.isBlank()) return
         mqttManager.publish(getPublishTopic("auto"))

@@ -213,7 +213,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                         onTurnOn = { dashboardViewModel.turnManual(true) },
                         onTurnOff = { dashboardViewModel.turnManual(false) },
                         onReturnAuto = dashboardViewModel::returnAuto,
-                        onOpenConfig = { navController.navigate(NavRoute.Config.route) },
+                        onReboot = { dashboardViewModel.rebootController() },
                         onNavigateToDiscovery = { 
                             navController.navigate(NavRoute.Discovery.route) {
                                 launchSingleTop = true
