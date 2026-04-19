@@ -194,9 +194,7 @@ fun AppRoot(factory: ViewModelProvider.Factory) {
                         onScanBleDevices = pairingViewModel::startBleScan,
                         onConnectBleDevice = pairingViewModel::connectBleDevice,
                         onScanWifi = pairingViewModel::scanWifi,
-                        onProvisionWifi = pairingViewModel::provisionWifi,
-                        onRefreshClaimCode = pairingViewModel::readBleStatus,
-                        onRequestClaimCode = pairingViewModel::requestClaimCode
+                        onProvisionWifi = pairingViewModel::provisionWifi
                     )
                 }
             }

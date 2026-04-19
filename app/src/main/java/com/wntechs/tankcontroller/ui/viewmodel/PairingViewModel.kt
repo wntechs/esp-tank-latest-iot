@@ -1,12 +1,13 @@
 package com.wntechs.tankcontroller.ui.viewmodel
 
 import android.bluetooth.BluetoothProfile
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wntechs.tankcontroller.data.ble.BleDeviceInfo
 import com.wntechs.tankcontroller.data.ble.BleManager
 import com.wntechs.tankcontroller.data.ble.BleScanItem
-
+import com.wntechs.tankcontroller.data.ble.MqttProvisioningPayload
 import com.wntechs.tankcontroller.data.ble.WifiScanResult
 import com.wntechs.tankcontroller.data.repository.DeviceRepository
 import com.wntechs.tankcontroller.data.repository.UserRepository
@@ -32,13 +33,7 @@ data class PairingUiState(
     val bleClaimCode: String = ""
 )
 
-data class MqttProvisioningPayload(
-    val host: String,
-    val port: Int,
-    val clientId: String,
-    val username: String,
-    val password: String
-)
+
 
 enum class DiscoveryMode {
     PAIRING_CODE, BLE
@@ -115,18 +110,15 @@ class PairingViewModel(
                 _uiState.update { it.copy(bleStatus = status) }
 
                 when {
-                    status.startsWith("claim:") -> {
-                        val claimCode = status.removePrefix("claim:").trim()
+                    status == "wifi_connected" -> {
                         _uiState.update {
-                            it.copy(
-                                bleClaimCode = claimCode,
-                                status = "Claim code received"
-                            )
+                            it.copy(status = "WiFi saved, waiting for provisioning...")
                         }
-                        autoStartClaimPairing(claimCode)
+                        // kick the next stage here if that is the intended flow
                     }
 
                 }
+
             }
         }
     }
@@ -290,15 +282,11 @@ class PairingViewModel(
                                 it.copy(status = "Device claimed. Fetching provisioning data...")
                             }
 
-                            val claimToken = claimResult.data.data?.token ?: token
-
-                            bleManager.acknowledgeClaimCode()
-
                             when (val provisioningResult = deviceRepository.fetchMqttProvisioningCredentials()) {
                                 is AppResult.Success -> {
                                     val creds = provisioningResult.data
 
-                                    bleManager.sendMqttProvisioning(
+                                    sendProvisioningToDevice(
                                         MqttProvisioningPayload(
                                             host = creds.host,
                                             port = creds.port,
@@ -307,7 +295,6 @@ class PairingViewModel(
                                             password = creds.password
                                         )
                                     )
-                                    bleManager.commitMqttProvisioning()
 
                                     _uiState.update {
                                         it.copy(
@@ -373,8 +360,7 @@ class PairingViewModel(
 
     private fun sendProvisioningToDevice(payload: MqttProvisioningPayload) {
         bleManager.acknowledgeClaimCode()
-        bleManager.sendMqttProvisioning(payload)
-        bleManager.commitMqttProvisioning()
+        bleManager.provisionMqttCredentials(payload)
 
         _uiState.update {
             it.copy(

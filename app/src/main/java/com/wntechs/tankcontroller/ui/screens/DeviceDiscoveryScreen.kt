@@ -48,9 +48,7 @@ fun DeviceDiscoveryScreen(
     onScanBleDevices: () -> Unit,
     onConnectBleDevice: (BleScanItem) -> Unit,
     onScanWifi: () -> Unit,
-    onProvisionWifi: (String, String) -> Unit,
-    onRefreshClaimCode: () -> Unit,
-    onRequestClaimCode: () -> Unit
+    onProvisionWifi: (String, String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -87,8 +85,6 @@ fun DeviceDiscoveryScreen(
                     onConnect = onConnectBleDevice,
                     onScanWifi = onScanWifi,
                     onProvision = onProvisionWifi,
-                    onRefreshClaimCode = onRefreshClaimCode,
-                    onRequestClaimCode = onRequestClaimCode
                 )
             }
         }
@@ -163,8 +159,6 @@ private fun BleProvisioningContent(
     onConnect: (BleScanItem) -> Unit,
     onScanWifi: () -> Unit,
     onProvision: (String, String) -> Unit,
-    onRefreshClaimCode: () -> Unit,
-    onRequestClaimCode: () -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -401,54 +395,30 @@ private fun BleProvisioningContent(
             }
 
             uiState.bleConnectionState == BluetoothProfile.STATE_CONNECTED -> {
-                SectionCard("Controller Info") {
-                    uiState.bleDeviceInfo?.let { info ->
-                        BleInfoRow("ID", info.device_id)
-                        BleInfoRow(
-                            "WiFi",
-                            if (info.wifi_connected) "Connected (${info.ssid})" else "Not Connected"
+                SectionCard("Device Info") {
+                    val info = uiState.bleDeviceInfo
+
+                    if (info == null) {
+                        Text(
+                            text = "Reading device info...",
+                            style = MaterialTheme.typography.bodySmall
                         )
+                    } else {
+                        BleInfoRow("Relay ID", info.device_id)
+                        BleInfoRow("Device UUID", shortHashStyle(info.device_uuid))
+                        BleInfoRow("Bootstrap Token", info.factory_bootstrap_token)
+                        BleInfoRow("Firmware", info.firmware_version)
+                        BleInfoRow("WiFi", if (info.wifi_connected) "Connected" else "Not Connected")
                         BleInfoRow("State", info.state)
                     }
 
                     if (uiState.bleStatus.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             text = "Status: ${uiState.bleStatus}",
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.bodySmall
                         )
-                    }
-
-                    if (uiState.bleClaimCode.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "Claim Code: ${uiState.bleClaimCode}",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(
-                            text = "This code was received from the device automatically.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onRefreshClaimCode,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Refresh Code")
-                        }
-
-                        Button(
-                            onClick = onRequestClaimCode,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Resend Code")
-                        }
                     }
                 }
 
@@ -520,8 +490,6 @@ fun DeviceDiscoveryCodePreview() {
             onConnectBleDevice = {},
             onScanWifi = {},
             onProvisionWifi = { _, _ -> },
-            onRefreshClaimCode = {},
-            onRequestClaimCode = {}
         )
     }
 }
@@ -546,9 +514,18 @@ fun DeviceDiscoveryBlePreview() {
             onScanBleDevices = {},
             onConnectBleDevice = {},
             onScanWifi = {},
-            onProvisionWifi = { _, _ -> },
-            onRefreshClaimCode = {},
-            onRequestClaimCode = {}
+            onProvisionWifi = { _, _ -> }
         )
+    }
+}
+
+fun shortHashStyle(value: String, head: Int = 6, tail: Int = 6): String {
+    val trimmed = value.trim()
+    if (trimmed.length <= head + tail + 3) return trimmed
+
+    return buildString {
+        append(trimmed.take(head))
+        append("...")
+        append(trimmed.takeLast(tail))
     }
 }

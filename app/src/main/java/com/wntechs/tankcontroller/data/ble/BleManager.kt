@@ -21,7 +21,7 @@ import android.os.ParcelUuid
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
-import com.wntechs.tankcontroller.ui.viewmodel.MqttProvisioningPayload
+
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -35,9 +35,20 @@ import java.util.UUID
 @Serializable
 data class BleDeviceInfo(
     val device_id: String = "",
+    val device_uuid: String = "",
+    val factory_bootstrap_token: String = "",
+    val firmware_version: String = "",
     val wifi_connected: Boolean = false,
     val ssid: String = "",
     val state: String = ""
+)
+
+data class MqttProvisioningPayload(
+    val host: String,
+    val port: Int,
+    val clientId: String,
+    val username: String,
+    val password: String
 )
 
 @Serializable
@@ -55,18 +66,6 @@ data class WifiScanResult(
     val secure: Boolean = true
 )
 
-@Serializable
-data class BleStatusEvent(
-    val state: String,
-    val count: Int? = null,
-    val message: String? = null
-)
-
-@Serializable
-data class BleStatus(
-    val status: String,
-    val message: String? = null
-)
 
 @Serializable
 private data class BleCommand(
@@ -101,7 +100,7 @@ class BleManager(private val context: Context) {
 
     private val pendingCommandWrites = ArrayDeque<String>()
     private var commandWriteInFlight = false
-    private val wifiScanBuffer = StringBuilder()
+
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
@@ -289,7 +288,15 @@ class BleManager(private val context: Context) {
         commandWriteInFlight = false
     }
 
-
+    fun provisionMqttCredentials(payload: MqttProvisioningPayload) {
+        sendCommand("pv|b")
+        sendProvisioningField("h", payload.host)
+        sendProvisioningField("i", payload.clientId)
+        sendProvisioningField("u", payload.username)
+        sendProvisioningField("p", payload.password)
+        sendCommand("pv|o|${payload.port}")
+        sendCommand("pv|c")
+    }
 
     private val gattCallback = object : BluetoothGattCallback() {
 
@@ -358,6 +365,22 @@ class BleManager(private val context: Context) {
             queueNotificationSetup(gatt)
         }
 
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "Characteristic read failed uuid=${characteristic.uuid} status=$status")
+                return
+            }
+
+            val text = value.toString(Charsets.UTF_8)
+            Log.d(TAG, "Device info raw payload: $text")
+            handleCharacteristicRead(characteristic.uuid, text)
+        }
+
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicRead(
             gatt: BluetoothGatt,
@@ -368,20 +391,9 @@ class BleManager(private val context: Context) {
                 Log.w(TAG, "Characteristic read failed uuid=${characteristic.uuid} status=$status")
                 return
             }
-
-            val value = characteristic.value?.decodeToString().orEmpty()
-
-            when (characteristic.uuid) {
-                CHAR_DEVICE_INFO_UUID -> {
-                    Log.d(TAG, "Device info: $value")
-                    _deviceInfo.value = parseDeviceInfo(value)
-                }
-
-                CHAR_STATUS_UUID -> {
-                    Log.d(TAG, "Status read: $value")
-                    handleStatusFrame(value)
-                }
-            }
+            Log.d(TAG, "B: Device info raw payload: $characteristic.value")
+            val text = characteristic.value?.decodeToString().orEmpty()
+            handleCharacteristicRead(characteristic.uuid, text)
         }
 
         override fun onCharacteristicChanged(
@@ -418,7 +430,6 @@ class BleManager(private val context: Context) {
             if (pendingNotificationUuids.isNotEmpty()) {
                 enableNextNotification(gatt)
             } else {
-                readStatus(gatt)
                 readDeviceInfo(gatt)
             }
         }
@@ -475,6 +486,7 @@ class BleManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun readDeviceInfo(gatt: BluetoothGatt) {
+        Log.d(TAG, "Starting device info read")
         val service = gatt.getService(SERVICE_UUID) ?: run {
             _status.value = "Service unavailable"
             return
@@ -565,6 +577,8 @@ class BleManager(private val context: Context) {
         }
 
         pendingNotificationUuids.clear()
+        pendingCommandWrites.clear()
+        commandWriteInFlight = false
         _connectionState.value = BluetoothProfile.STATE_DISCONNECTED
         _deviceInfo.value = null
         _claimCode.value = ""
@@ -720,6 +734,9 @@ class BleManager(private val context: Context) {
 
             BleDeviceInfo(
                 device_id = map["d"].orEmpty(),
+                device_uuid = map["u"].orEmpty(),
+                factory_bootstrap_token = map["k"].orEmpty(),
+                firmware_version = map["fv"].orEmpty(),
                 wifi_connected = map["w"] == "1",
                 ssid = map["s"].orEmpty(),
                 state = map["st"].orEmpty()
@@ -765,22 +782,9 @@ class BleManager(private val context: Context) {
         sendCommand("""{"cmd":"ack"}""")
     }
 
-    fun beginMqttProvisioning() {
-        sendCommand("pv|b")
-    }
 
-    fun commitMqttProvisioning() {
-        sendCommand("pv|c")
-    }
 
-    fun sendMqttProvisioning(payload: MqttProvisioningPayload) {
-        beginMqttProvisioning()
-        sendProvisioningField("h", payload.host)
-        sendProvisioningField("i", payload.clientId)
-        sendProvisioningField("u", payload.username)
-        sendProvisioningField("p", payload.password)
-        sendCommand("pv|o|${payload.port}")
-    }
+
 
     private fun sendProvisioningField(field: String, value: String) {
         if (value.isBlank()) return
@@ -816,5 +820,19 @@ class BleManager(private val context: Context) {
         }
 
         return chunks
+    }
+
+    private fun handleCharacteristicRead(uuid: UUID, value: String) {
+        when (uuid) {
+            CHAR_DEVICE_INFO_UUID -> {
+                Log.d(TAG, "Device info: $value")
+                _deviceInfo.value = parseDeviceInfo(value)
+            }
+
+            CHAR_STATUS_UUID -> {
+                Log.d(TAG, "Status read: $value")
+                handleStatusFrame(value)
+            }
+        }
     }
 }
