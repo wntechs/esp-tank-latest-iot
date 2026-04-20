@@ -26,6 +26,7 @@ data class ConfigurationForm(
     val minMotorRunSeconds: String = "",
     val minMotorOffSeconds: String = "",
     val sensorTimeoutSeconds: String = "",
+    val maxMotorRunSeconds: String = "", // max_motor_run_seconds
 )
 
 data class ConfigurationUiState(
@@ -127,6 +128,7 @@ private fun ConfigResponse.toForm() = ConfigurationForm(
     minMotorRunSeconds = minMotorRunSeconds.toString(),
     minMotorOffSeconds = minMotorOffSeconds.toString(),
     sensorTimeoutSeconds = sensorTimeoutSeconds.toString(),
+    maxMotorRunSeconds = maxMotorRunSeconds.toString(),
 )
 
 private fun ConfigurationForm.toRequest() = ConfigUpdateRequest(
@@ -144,4 +146,5 @@ private fun ConfigurationForm.toRequest() = ConfigUpdateRequest(
     minMotorRunSeconds = minMotorRunSeconds.toIntOrNull(),
     minMotorOffSeconds = minMotorOffSeconds.toIntOrNull(),
     sensorTimeoutSeconds = sensorTimeoutSeconds.toIntOrNull(),
+    maxMotorRunSeconds = maxMotorRunSeconds.toIntOrNull(),
 )

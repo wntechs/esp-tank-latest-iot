@@ -36,6 +36,7 @@ data class ConfigResponse(
     @SerialName("min_motor_run_seconds") val minMotorRunSeconds: Int = 0,
     @SerialName("min_motor_off_seconds") val minMotorOffSeconds: Int = 0,
     @SerialName("sensor_timeout_seconds") val sensorTimeoutSeconds: Int = 0,
+    @SerialName("max_motor_run_seconds") val maxMotorRunSeconds: Int = 0,
 )
 
 @Serializable
@@ -54,6 +55,7 @@ data class ConfigUpdateRequest(
     @SerialName("min_motor_run_seconds") val minMotorRunSeconds: Int? = null,
     @SerialName("min_motor_off_seconds") val minMotorOffSeconds: Int? = null,
     @SerialName("sensor_timeout_seconds") val sensorTimeoutSeconds: Int? = null,
+    @SerialName("max_motor_run_seconds") val maxMotorRunSeconds: Int? = 0,
 )
 
 @Serializable

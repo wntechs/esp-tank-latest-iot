@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationForm
 import com.wntechs.tankcontroller.ui.viewmodel.ConfigurationUiState
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,21 +105,30 @@ fun ConfigurationScreen(
 
         // Group 3: Automation Logic
         SectionCard("Automation & Limits") {
-            Text("Start Motor at: ${form.startLevelPercent}%", style = MaterialTheme.typography.bodyMedium)
-            Slider(
-                value = form.startLevelPercent.toFloat(),
-                onValueChange = { v -> onUpdateField { it.copy(startLevelPercent = v.toInt()) } },
-                valueRange = 0f..100f,
-                steps = 100
+            Text(
+                text = "Motor Levels: ${form.startLevelPercent}% (Start) - ${form.stopLevelPercent}% (Stop)",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold
             )
 
-            Text("Stop Motor at: ${form.stopLevelPercent}%", style = MaterialTheme.typography.bodyMedium)
-            Slider(
-                value = form.stopLevelPercent.toFloat(),
-                onValueChange = { v -> onUpdateField { it.copy(stopLevelPercent = v.toInt()) } },
+            RangeSlider(
+                value = form.startLevelPercent.toFloat()..form.stopLevelPercent.toFloat(),
+                onValueChange = { range ->
+                    // Use roundToInt() to prevent the non-moving thumb from jittering
+                    val newStart = kotlin.math.round(range.start).toInt()
+                    val newStop = kotlin.math.round(range.endInclusive).toInt()
+
+                    onUpdateField { it.copy(
+                        startLevelPercent = newStart,
+                        stopLevelPercent = newStop
+                    ) }
+                },
                 valueRange = 0f..100f,
-                steps = 100
+                // Removing 'steps' makes the movement smooth and independent.
+                // The roundToInt() logic above handles the discretization to 0-100 integers.
+                modifier = Modifier.fillMaxWidth()
             )
+
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -136,11 +147,24 @@ fun ConfigurationScreen(
                 }
             }
 
-            NumberField(
-                label = "Sensor Timeout (sec)",
-                value = form.sensorTimeoutSeconds,
-                onValueChange = { v -> onUpdateField { it.copy(sensorTimeoutSeconds = v) } }
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    NumberField(
+                        label = "Max Motor Runtime (sec)",
+                        value = form.maxMotorRunSeconds,
+                        onValueChange = { v -> onUpdateField { it.copy(maxMotorRunSeconds = v) } }
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    NumberField(
+                        label = "Sensor Timeout (sec)",
+                        value = form.sensorTimeoutSeconds,
+                        onValueChange = { v -> onUpdateField { it.copy(sensorTimeoutSeconds = v) } }
+                    )
+                }
+            }
+
+
         }
 
         if (uiState.error != null) MessageBanner(uiState.error, isError = true)
