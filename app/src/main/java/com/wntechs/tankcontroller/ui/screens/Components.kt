@@ -1,21 +1,34 @@
 package com.wntechs.tankcontroller.ui.screens
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeviceHub
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
@@ -35,11 +48,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wntechs.tankcontroller.data.model.OwnedDevice
+import com.wntechs.tankcontroller.data.repository.MqttConnectionState
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardUiState
 
 @Composable
@@ -72,33 +90,246 @@ fun NumberField(label: String, value: String, onValueChange: (String) -> Unit) {
 }
 
 @Composable
-fun WaterLevelCard(uiState: DashboardUiState) {
-    val status = uiState.status
-    val progress = status.waterLevelPercent.coerceIn(0, 100) / 100f
-    Card(shape = RoundedCornerShape(24.dp)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color(0xFF1E88E5), Color(0xFF1565C0))))
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Water Level", color = Color.White.copy(alpha = 0.9f))
-            Text("${status.waterLevelPercent}%", color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.3f))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress)
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White)
+fun CylindricalTank(
+    modifier: Modifier = Modifier,
+    progress: Int, // 0 to 100
+    isSensorConnected: Boolean = true, // New parameter for sensor status
+
+) {
+    // Smoothly animate the water level change
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress.toFloat() / 100f,
+        animationSpec = tween(durationMillis = 1000),
+        label = "WaterLevel"
+    )
+
+    // Animation for radio waves
+    val infiniteTransition = rememberInfiniteTransition(label = "RadioWaves")
+    val waveRadiusScale by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "WaveScale"
+    )
+    val waveAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "WaveAlpha"
+    )
+
+    val tankColor = MaterialTheme.colorScheme.surfaceVariant
+    val waterGradient = Brush.verticalGradient(
+        colors = listOf(Color(0xFF2196F3), Color(0xFF1976D2))
+    )
+    val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    val sensorColor = if (isSensorConnected) Color(0xFF4CAF50) else Color(0xFFF44336)
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val capHeight = h * 0.1f
+
+            // 1. Draw the Tank Background
+            val tankPath = Path().apply {
+                moveTo(0f, capHeight)
+                lineTo(0f, h - capHeight)
+                cubicTo(0f, h, w, h, w, h - capHeight)
+                lineTo(w, capHeight)
+                cubicTo(w, 0f, 0f, 0f, 0f, capHeight)
+                close()
+            }
+            drawPath(tankPath, color = tankColor)
+            drawPath(
+                path = tankPath,
+                color = borderColor,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+            )
+
+            // 2. Draw the Water (Clipped)
+            val waterLevelY = h - (animatedProgress * (h - capHeight)) - capHeight
+            clipPath(tankPath) {
+                drawRect(
+                    brush = waterGradient,
+                    topLeft = Offset(0f, waterLevelY),
+                    size = Size(w, h - waterLevelY)
                 )
+                drawOval(
+                    color = Color(0xFF64B5F6).copy(alpha = 0.8f),
+                    topLeft = Offset(0f, waterLevelY - (capHeight / 2)),
+                    size = Size(w, capHeight)
+                )
+            }
+
+            // 3. Draw Top Rim
+            drawOval(
+                color = borderColor,
+                topLeft = Offset(0f, 0f),
+                size = Size(w, capHeight),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+            )
+
+            // 4. Draw Sensor on top of the lid
+            val sensorRadius = 6.dp.toPx()
+            val sensorCenter = Offset(w * 0.5f, capHeight * 0.5f)
+
+            // Animated Radio Waves (only if connected)
+            if (isSensorConnected) {
+                drawCircle(
+                    color = sensorColor.copy(alpha = waveAlpha),
+                    radius = sensorRadius + (waveRadiusScale * 20.dp.toPx()),
+                    center = sensorCenter,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+                )
+            }
+
+            // The Sensor "Bulb"
+            drawCircle(
+                color = sensorColor,
+                radius = sensorRadius,
+                center = sensorCenter
+            )
+        }
+
+        // 5. Centered Percentage Text
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "$progress%",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (progress > 40) Color.White else MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+fun WaterLevelCard(
+    uiState: DashboardUiState,
+    onTurnOn: () -> Unit,
+    onTurnOff: () -> Unit,
+    onToggleAuto: () -> Unit // New callback for the switch
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(20.dp)
+                .height(210.dp), // Slightly increased height for the switch
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            // 1. Tank Visualization
+            CylindricalTank(
+                progress = uiState.status.waterLevelPercent,
+                isSensorConnected = uiState.status.sensorConnected,
+                modifier = Modifier
+                    .width(100.dp)
+                    .fillMaxHeight()
+            )
+
+            // 2. Pump & Mode Control Box
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Status & Mode Display Panel
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Left: Pump Status
+                        Column {
+                            Text(
+                                text = "PUMP",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Text(
+                                text = if (uiState.status.motorOn) "ON" else "OFF",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (uiState.status.motorOn) Color(0xFF43A047) else MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        // Right: Auto/Manual Switch
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = if (!uiState.status.manualOverride) "AUTO" else "MANUAL",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (!uiState.status.manualOverride) Color(0xFF2196F3) else Color(0xFFF57C00)
+                            )
+                            androidx.compose.material3.Switch(
+                                checked = !uiState.status.manualOverride,
+                                onCheckedChange = { onToggleAuto() },
+                                enabled = uiState.connectionState is MqttConnectionState.Connected,
+                                thumbContent = if (!uiState.status.manualOverride) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Default.DeviceHub,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(androidx.compose.material3.SwitchDefaults.IconSize)
+                                        )
+                                    }
+                                } else null
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Manual Controls",
+                    style = MaterialTheme.typography.labelMedium
+                )
+
+                // Circular Control Buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = onTurnOn,
+                        enabled = uiState.status.manualOverride && !uiState.status.motorOn && uiState.connectionState is MqttConnectionState.Connected,
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        modifier = Modifier.size(56.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF43A047))
+                    ) {
+                        Text("ON", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    Button(
+                        onClick = onTurnOff,
+                        enabled = uiState.status.manualOverride && uiState.status.motorOn && uiState.connectionState is MqttConnectionState.Connected,
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        modifier = Modifier.size(56.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("OFF", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
             }
         }
     }
@@ -161,7 +392,12 @@ fun DeviceSelector(
                     text = {
                         Column {
                             Text(device.serialNumber, fontWeight = FontWeight.Bold)
-                            device.model?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            device.model?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     },
                     onClick = {
@@ -173,8 +409,15 @@ fun DeviceSelector(
             Divider()
             DropdownMenuItem(
                 text = {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
                         Text("Add New Device")
                     }
                 },
