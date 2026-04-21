@@ -1,5 +1,6 @@
 package com.wntechs.tankcontroller.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -7,11 +8,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
@@ -42,6 +42,8 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,15 +52,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.wntechs.tankcontroller.R
 import com.wntechs.tankcontroller.data.model.OwnedDevice
 import com.wntechs.tankcontroller.data.repository.MqttConnectionState
 import com.wntechs.tankcontroller.ui.viewmodel.DashboardUiState
@@ -218,8 +221,20 @@ fun WaterLevelCard(
     uiState: DashboardUiState,
     onTurnOn: () -> Unit,
     onTurnOff: () -> Unit,
-    onToggleAuto: () -> Unit // New callback for the switch
+    onToggleAuto: () -> Unit
 ) {
+    // 1. Setup the Blinking Animation (Alpha)
+    val infiniteTransition = rememberInfiniteTransition(label = "PumpBlink")
+    val blinkAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.3f, // Dims to 30% opacity
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse // Creates the "pulse/blink" effect
+        ),
+        label = "BlinkAlpha"
+    )
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -227,11 +242,11 @@ fun WaterLevelCard(
         Row(
             modifier = Modifier
                 .padding(20.dp)
-                .height(210.dp), // Slightly increased height for the switch
+                .height(210.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // 1. Tank Visualization
+            // Tank Visualization
             CylindricalTank(
                 progress = uiState.status.waterLevelPercent,
                 isSensorConnected = uiState.status.sensorConnected,
@@ -240,11 +255,11 @@ fun WaterLevelCard(
                     .fillMaxHeight()
             )
 
-            // 2. Pump & Mode Control Box
+            // Pump & Mode Control Box
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 // Status & Mode Display Panel
                 Card(
@@ -253,37 +268,69 @@ fun WaterLevelCard(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .padding(12.dp)
                             .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Left: Pump Status
-                        Column {
-                            Text(
-                                text = "PUMP",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary
+                        // Top Section: Animated Water Pump Icon & Status
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.water_pump),
+                                contentDescription = "Pump Status",
+                                modifier = Modifier
+                                    .size(34.dp),
+                                // Apply the animated alpha only if motor is On
+                                tint = if (uiState.status.motorOn)
+                                    Color(0xFF43A047).copy(alpha = blinkAlpha)
+                                else
+                                    MaterialTheme.colorScheme.outline
                             )
-                            Text(
-                                text = if (uiState.status.motorOn) "ON" else "OFF",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (uiState.status.motorOn) Color(0xFF43A047) else MaterialTheme.colorScheme.error
-                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "PUMP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                                Text(
+                                    text = if (uiState.status.motorOn) "RUNNING" else "IDLE",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (uiState.status.motorOn) Color(0xFF43A047) else MaterialTheme.colorScheme.outline
+                                )
+                            }
                         }
 
-                        // Right: Auto/Manual Switch
-                        Column(horizontalAlignment = Alignment.End) {
+                        // Subtle Divider
+                        androidx.compose.material3.HorizontalDivider(
+                            modifier = Modifier.width(120.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        )
+
+                        // Bottom Section: Auto/Manual Switch
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(
                                 text = if (!uiState.status.manualOverride) "AUTO" else "MANUAL",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (!uiState.status.manualOverride) Color(0xFF2196F3) else Color(0xFFF57C00)
+                                color = if (!uiState.status.manualOverride) Color(0xFF2196F3) else Color(
+                                    0xFFF57C00
+                                )
                             )
-                            androidx.compose.material3.Switch(
+                            Spacer(Modifier.width(12.dp))
+                            Switch(
                                 checked = !uiState.status.manualOverride,
                                 onCheckedChange = { onToggleAuto() },
                                 enabled = uiState.connectionState is MqttConnectionState.Connected,
@@ -292,7 +339,7 @@ fun WaterLevelCard(
                                         Icon(
                                             imageVector = Icons.Default.DeviceHub,
                                             contentDescription = null,
-                                            modifier = Modifier.size(androidx.compose.material3.SwitchDefaults.IconSize)
+                                            modifier = Modifier.size(SwitchDefaults.IconSize)
                                         )
                                     }
                                 } else null
@@ -301,10 +348,6 @@ fun WaterLevelCard(
                     }
                 }
 
-                Text(
-                    text = "Manual Controls",
-                    style = MaterialTheme.typography.labelMedium
-                )
 
                 // Circular Control Buttons
                 Row(
@@ -313,26 +356,29 @@ fun WaterLevelCard(
                 ) {
                     Button(
                         onClick = onTurnOn,
+                        // Enabled only in manual mode when pump is off
                         enabled = uiState.status.manualOverride && !uiState.status.motorOn && uiState.connectionState is MqttConnectionState.Connected,
                         shape = androidx.compose.foundation.shape.CircleShape,
                         modifier = Modifier.size(56.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                        contentPadding = PaddingValues(0.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF43A047))
                     ) {
-                        Text("ON", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("ON", fontWeight = FontWeight.Bold)
                     }
 
                     Button(
                         onClick = onTurnOff,
+                        // Enabled only in manual mode when pump is on
                         enabled = uiState.status.manualOverride && uiState.status.motorOn && uiState.connectionState is MqttConnectionState.Connected,
                         shape = androidx.compose.foundation.shape.CircleShape,
                         modifier = Modifier.size(56.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                        contentPadding = PaddingValues(0.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("OFF", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("OFF", fontWeight = FontWeight.Bold)
                     }
                 }
+                Text(text = "Manual Controls", style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -432,6 +478,7 @@ fun DeviceSelector(
         }
     }
 }
+
 @Composable
 private fun StatusCard(label: String, value: String) {
     Card {
@@ -466,14 +513,33 @@ fun ConnectionStatusCard(state: MqttConnectionState) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     Text("Connecting to MQTT...", style = MaterialTheme.typography.bodyMedium)
                 }
+
                 MqttConnectionState.Connected -> {
-                    Icon(Icons.Default.CloudDone, contentDescription = null, tint = Color(0xFF2E7D32))
-                    Text("Connected to Cloud", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF2E7D32))
+                    Icon(
+                        Icons.Default.CloudDone,
+                        contentDescription = null,
+                        tint = Color(0xFF2E7D32)
+                    )
+                    Text(
+                        "Connected to Cloud",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF2E7D32)
+                    )
                 }
+
                 is MqttConnectionState.Error -> {
-                    Icon(Icons.Default.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Text("Connection Error", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    Icon(
+                        Icons.Default.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Text(
+                        "Connection Error",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
+
                 MqttConnectionState.Disconnected -> {
                     Icon(Icons.Default.CloudOff, contentDescription = null)
                     Text("Disconnected", style = MaterialTheme.typography.bodyMedium)
