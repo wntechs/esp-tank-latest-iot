@@ -157,7 +157,7 @@ class PairingViewModel(
     fun startBleScan() {
         _uiState.update { it.copy(bleDevices = emptyList(), error = null, status = "Scanning for controllers...") }
         try {
-            bleManager.startScan(filterByServiceUuid = false)
+            bleManager.startScan(filterByServiceUuid = true)
         } catch (e: SecurityException) {
             _uiState.update { it.copy(error = "Bluetooth scan permission missing", status = null) }
         }

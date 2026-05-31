@@ -88,6 +88,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun clearMqttCreds() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.mqttCreds)
+        }
+    }
+
     suspend fun saveDeviceList(devices: List<OwnedDevice>) {
         context.dataStore.edit { prefs ->
             prefs[Keys.deviceList] = json.encodeToString(devices)

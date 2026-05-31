@@ -32,6 +32,7 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.wntechs.tankcontroller.ui.theme.TankControllerTheme
 import com.wntechs.tankcontroller.ui.viewmodel.DiscoveryMode
@@ -307,7 +308,7 @@ private fun BleProvisioningContent(
                     onClick = onScanDevices,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.BluetoothSearching, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.BluetoothSearching, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Scan for Controllers")
                 }

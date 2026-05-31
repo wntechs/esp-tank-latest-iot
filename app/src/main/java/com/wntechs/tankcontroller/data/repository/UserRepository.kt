@@ -163,9 +163,11 @@ class UserRepository(
                 settingsStore.saveMqttCreds(creds)
                 AppResult.Success(creds)
             } else {
+                settingsStore.clearMqttCreds()
                 AppResult.Error(parseError(response))
             }
         } catch (e: Exception) {
+            settingsStore.clearMqttCreds()
             AppResult.Error(e.message ?: "Unknown error")
         }
     }

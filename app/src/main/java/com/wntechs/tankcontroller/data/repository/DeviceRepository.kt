@@ -109,6 +109,16 @@ class DeviceRepository(
                 }
             }
             is AppResult.Error -> {
+                // Check if the error indicates a loss of ownership/relationship
+                if (issueResult.message.contains("active relationship", ignoreCase = true)) {
+                    Log.w("DeviceRepository", "Device ownership lost. Clearing local configuration.")
+
+                    // Clear the selected device ID so the app stops trying to connect to it
+                    saveDeviceId("")
+
+                    // Clear any stored MQTT credentials for this device
+                    settingsStore.clearMqttCreds()
+                }
                 _connectionState.value = MqttConnectionState.Error(issueResult.message)
                 AppResult.Error(issueResult.message)
             }
